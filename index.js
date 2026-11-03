@@ -813,13 +813,20 @@ export function apply(ctx, config) {
     try { process.kill(shellBeatPid, 0); return true; } catch { return false; }
   };
 
-  const shellStatus = () => ({
-    supported: process.platform === 'win32',
-    running: !!shellChild || externalShellAlive(),
-    external: !shellChild && externalShellAlive(),
-    platform: process.platform,
-    error: shellError,
-  });
+  // 「站起来了」以壳自己的心跳为准：进程起来了不等于窗口画出来了（冷启动约 2 秒），
+  // 这期间网页里那只不能先隐身，否则就是「点了放她到桌面，人不见了」。
+  const shellStatus = () => {
+    const beat = externalShellAlive();
+    return {
+      supported: process.platform === 'win32',
+      running: !!shellChild || beat,
+      // external = 窗口真的在了（心跳从 Loaded 里发出来），跟谁启动的无关
+      external: beat,
+      starting: !!shellChild && !beat,
+      platform: process.platform,
+      error: shellError,
+    };
+  };
 
   const launchShell = async (origin) => {
     if (process.platform !== 'win32') {

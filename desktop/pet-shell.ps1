@@ -153,6 +153,7 @@ $window.ResizeMode = 'NoResize'
 $window.Width = $WindowWidth
 $window.Height = $PetHeight + 40
 
+# 先给个占位位置，别让窗口在 (0,0) 闪一下；真正的落点在 Loaded 里按光标所在屏算。
 $screen = [System.Windows.SystemParameters]::WorkArea
 $window.Left = $screen.Right - $WindowWidth - 24
 $window.Top  = $screen.Bottom - ($PetHeight + 40) - 16
@@ -423,6 +424,8 @@ $spriteRead = Join-Path $AssetDir 'pet-read.png'
 
 function Set-PetImage {
   param([string]$Kind)
+  # 眼神会按秒重算，同一张图不要反复解码
+  if ($script:PetKind -eq $Kind -and $petBrush.ImageSource) { return }
   $path = switch ($Kind) {
     'open' { $spriteOpen }
     'read' { $spriteRead }
@@ -437,12 +440,29 @@ function Set-PetImage {
   $bmp.EndInit()
   $bmp.Freeze()
   $petBrush.ImageSource = $bmp
+  $script:PetKind = $Kind
+}
+
+# --- 眼神 -------------------------------------------------------------------
+# 闭眼入定 / 垂目看经 / 睁眼看你——三种眼神是三种注意力朝向。
+# 睁眼只在「跟你发生关系」的那一拍（点开、收起、读完、被拖动），到期自己落回去。
+$script:PetKind = ''
+$script:LookUntil = [DateTime]::MinValue
+
+function Set-Look {
+  param([int]$Ms)
+  $script:LookUntil = [DateTime]::Now.AddMilliseconds($Ms)
 }
 
 function Update-PetImage {
-  if ($script:ShowingStudy -or $script:ShowingCard) { Set-PetImage 'read' }
-  elseif ($script:State -and $script:State.unread -gt 0) { Set-PetImage 'open' }
-  else { Set-PetImage 'idle' }
+  if ([DateTime]::Now -lt $script:LookUntil) { Set-PetImage 'open'; return }
+  if ($script:ShowingStudy -or $script:ShowingCard) { Set-PetImage 'read'; return }
+  # 有未读不常亮（那是干瞪眼）：每 20 秒抬眼看你两三秒就走
+  if ($script:State -and $script:State.unread -gt 0 -and ([DateTime]::Now.Second % 20) -lt 3) {
+    Set-PetImage 'open'
+    return
+  }
+  Set-PetImage 'idle'
 }
 
 function Set-CardSize {
@@ -454,14 +474,41 @@ function Set-CardSize {
   $petImage.Width = [int]($petH * 0.96)
   $bottom = $window.Top + $window.Height
   $window.Height = $height
-  $wa = [System.Windows.SystemParameters]::WorkArea
+  $wa = Get-WindowWorkArea
   $window.Top = [Math]::Max($wa.Top, $bottom - $height)
+}
+
+# --- 多显示器 -----------------------------------------------------------------
+# SystemParameters.WorkArea 只认主屏。DSH 摆在副屏上时，按主屏算位置会把她
+# 扔到另一块屏幕的角落——看起来就是「点了放她到桌面，人就不见了」。
+# 统一改成：谁在光标底下就按哪块屏幕算；判断在不在屏上则看所有屏幕。
+function Convert-PhysicalRectToDip {
+  param($Rect)
+  $s = Get-DpiScale
+  if (-not $s -or $s -le 0) { $s = 1.0 }
+  return [pscustomobject]@{
+    Left   = $Rect.Left / $s
+    Top    = $Rect.Top / $s
+    Right  = $Rect.Right / $s
+    Bottom = $Rect.Bottom / $s
+  }
+}
+
+function Get-CursorWorkArea {
+  $scr = [System.Windows.Forms.Screen]::FromPoint([System.Windows.Forms.Cursor]::Position)
+  return Convert-PhysicalRectToDip $scr.WorkingArea
+}
+
+function Get-WindowWorkArea {
+  $p = $window.PointToScreen([System.Windows.Point]::new($window.Width / 2, $window.Height / 2))
+  $scr = [System.Windows.Forms.Screen]::FromPoint([System.Drawing.Point]::new([int]$p.X, [int]$p.Y))
+  return Convert-PhysicalRectToDip $scr.WorkingArea
 }
 
 # 按内容实际高度定窗口高度：写死常数会在换经书/长释义时把卡片顶部裁掉。
 function Fit-WindowHeight {
   $window.UpdateLayout()
-  $wa = [System.Windows.SystemParameters]::WorkArea
+  $wa = Get-WindowWorkArea
   $available = $wa.Bottom - $wa.Top
   $need = [Math]::Ceiling($stack.ActualHeight) + 4
   $floor = $PetHeight + 20
@@ -471,18 +518,25 @@ function Fit-WindowHeight {
   $window.Top = [Math]::Max($wa.Top, $bottom - $target)
 }
 
-# 把窗口拉回工作区：显示器拔插、缩放变化、或历史残留位置都可能让它跑到屏幕外。
+# 把窗口放到「鼠标所在那块屏」的右下角：用户刚点完按钮，光标就在他眼前那块屏上。
 function Reset-PetPosition {
-  $wa = [System.Windows.SystemParameters]::WorkArea
-  $window.Left = $wa.Right - $window.Width - 24
-  $window.Top = $wa.Bottom - $window.Height - 16
+  $wa = Get-CursorWorkArea
+  $window.Left = [Math]::Max($wa.Left, $wa.Right - $window.Width - 24)
+  $window.Top = [Math]::Max($wa.Top, $wa.Bottom - $window.Height - 16)
 }
 
+# 只要窗口中心落在任意一块屏幕上就算「在屏内」，不再是只在主屏里才算。
 function Test-OnScreen {
-  $wa = [System.Windows.SystemParameters]::WorkArea
-  $cx = $window.Left + ($window.Width / 2)
-  $cy = $window.Top + ($window.Height / 2)
-  return ($cx -ge $wa.Left -and $cx -le $wa.Right -and $cy -ge $wa.Top -and $cy -le $wa.Bottom)
+  try {
+    $p = $window.PointToScreen([System.Windows.Point]::new($window.Width / 2, $window.Height / 2))
+    foreach ($scr in [System.Windows.Forms.Screen]::AllScreens) {
+      $b = $scr.Bounds
+      if ($p.X -ge $b.Left -and $p.X -le $b.Right -and $p.Y -ge $b.Top -and $p.Y -le $b.Bottom) { return $true }
+    }
+    return $false
+  } catch {
+    return $true
+  }
 }
 
 function Show-Error {
@@ -629,6 +683,7 @@ function Toggle-Card {
     $script:ShowingCard = $false
     $script:ShowingStudy = $false
     $cardBorder.Visibility = 'Collapsed'
+    Set-Look 600   # 合卷，抬眼看你一下
     Set-CardSize $false
     Update-PetImage
     Fit-WindowHeight
@@ -638,6 +693,7 @@ function Toggle-Card {
     $script:PageIndex = 0
     $script:PinnedId = $null
     $cardBorder.Visibility = 'Visible'
+    Set-Look 400   # 先抬眼「哦，是你」，再低头捧经
     Set-CardSize $true
     Refresh-State | Out-Null
     Render-Card
@@ -719,7 +775,8 @@ function Invoke-Import {
 function Move-PetTo {
   param([double]$Left, [double]$Top)
   # 整只窗留在工作区内：不能让桌宠「拖到屏幕边缘就再也找不到」。
-  $wa = [System.Windows.SystemParameters]::WorkArea
+  # 拖动时按光标所在那块屏算，副屏上也能拖到头。
+  $wa = Get-CursorWorkArea
   $maxLeft = [Math]::Max($wa.Left, $wa.Right - $window.Width)
   $maxTop = [Math]::Max($wa.Top, $wa.Bottom - $window.Height)
   $window.Left = [Math]::Max($wa.Left, [Math]::Min($Left, $maxLeft))
@@ -778,6 +835,7 @@ $petImage.Add_MouseLeftButtonUp({
     $script:DragMoved = $false
     [void]$petImage.ReleaseMouseCapture()
     if ($moved) {
+      Set-Look 400   # 放下了，看你一眼
       Move-PetTo -Left $window.Left -Top $window.Top   # 拖完拉回屏内
     } else {
       Toggle-Card
@@ -846,6 +904,13 @@ $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 $menu.Items.Add($miQuit) | Out-Null
 $petImage.ContextMenu = $menu
 
+# --- 眼神节拍 ---------------------------------------------------------------
+# 只负责「睁眼那几秒到期了没」和「未读的间歇抬眼」：一秒一次，图没变就不动。
+$lookTimer = New-Object System.Windows.Threading.DispatcherTimer
+$lookTimer.Interval = [TimeSpan]::FromSeconds(1)
+$lookTimer.Add_Tick({ Update-PetImage })
+$lookTimer.Start()
+
 # --- 轮询 -------------------------------------------------------------------
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(20)
@@ -859,7 +924,8 @@ $timer.Add_Tick({
 $timer.Start()
 
 $window.Add_Loaded({
-    if (-not (Test-OnScreen)) { Reset-PetPosition }
+    # 落到「鼠标所在那块屏」的右下角：用户刚点完按钮，光标就在他眼前那块屏上。
+    Reset-PetPosition
     Set-PetImage 'idle'
     Refresh-State | Out-Null
     Send-Heartbeat

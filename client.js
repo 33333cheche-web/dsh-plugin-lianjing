@@ -229,6 +229,10 @@ window.__ModuleLoader__.load({
       const pinned = useRef(null);
       const marked = useRef(new Set());
       const [, setClock] = useState(0);
+      // 「抬眼」是一次性的：闭眼入定 / 垂目看经 / 睁眼看你，三种眼神三种注意力朝向。
+      // 只有跟人发生关系的那一拍才睁眼（点开、收起、读完、被拖动），到期自动落回去。
+      const [lookUntil, setLookUntil] = useState(0);
+      const look = useCallback((ms) => setLookUntil(Date.now() + ms), []);
 
       const history = (data?.cards || []).filter((c) => c && c.cite);
       const current = (pinned.current && history.find((c) => c.id === pinned.current)) || history[0] || null;
@@ -238,6 +242,9 @@ window.__ModuleLoader__.load({
       const running = !!(data?.running || busy);
       const unread = Number(data?.unread || 0);
       const online = !error;
+      // 「站起来了」以心跳为准：running 只说明进程起来了，窗口还没画出来（冷启动约 2 秒）
+      const shellUp = !!(shell?.running && shell?.external);
+      const shellStarting = !!(shell?.running && !shell?.external);
       const countdown = data?.nextRunAt ? Date.parse(data.nextRunAt) - Date.now() : NaN;
 
       const refresh = useCallback(async () => {
@@ -287,11 +294,25 @@ window.__ModuleLoader__.load({
         void post(API.read, { id: current.id }).then(() => refresh()).catch(() => { /* 下次轮询会补上 */ });
       }, [open, view, current, refresh]);
 
+      // 这一部读完了：抬眼久一点，是「合经」的那一拍
+      const doneRead = Number(current?.progress?.read || 0);
+      const doneTotal = Number(current?.progress?.total || 0);
+      useEffect(() => {
+        if (doneRead > 0 && doneRead >= doneTotal) look(1500);
+        // 只在「刚读完」那一刻触发：read 涨到 total 时依赖才变
+      }, [doneRead, doneTotal, look]);
+
       const sprite = () => {
         const sprites = data?.pet?.sprites;
         if (!sprites || spriteBroken) return '';
+        const now = Date.now();
+        // 1. 抬眼看你：点开/收起/读完/被拖动之后的短暂一拍
+        if (now < lookUntil) return sprites.open || sprites.idle;
+        // 2. 卡片开着就是在读，垂目
         if (view === 'study' || view === 'fetch' || (open && current)) return sprites.read || sprites.idle;
-        if (unread > 0) return sprites.open || sprites.idle;
+        // 3. 有未读：不常亮睁眼（那是干瞪眼），每 20 秒抬眼看你一下就走
+        if (unread > 0 && (now % 20000) < 2600) return sprites.open || sprites.idle;
+        // 4. 其余时间闭眼入定
         return sprites.idle || '';
       };
 
@@ -300,6 +321,7 @@ window.__ModuleLoader__.load({
         const rect = event.currentTarget.closest('[data-fojing-pet]')?.getBoundingClientRect();
         if (!rect) return;
         drag.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top, moved: false };
+        look(120000); // 被搬着的时候睁眼
         event.currentTarget.setPointerCapture?.(event.pointerId);
       };
       const onDrag = (event) => {
@@ -314,12 +336,14 @@ window.__ModuleLoader__.load({
         suppress.current = drag.current.moved;
         drag.current = null;
         if (pos) writePos(pos);
+        look(400); // 放下来，看还看不看你
       };
 
       const close = () => {
         setOpen(false);
         setView('card');
         pinned.current = null;
+        look(600); // 合卷，抬眼看你一下
       };
 
       const regenerate = async () => {
@@ -443,14 +467,31 @@ window.__ModuleLoader__.load({
       const toggleShell = async () => {
         if (shellBusy) return;
         setShellBusy(true);
+        const action = shellUp ? 'quit' : 'launch';
         try {
-          const action = shell?.running ? 'quit' : 'launch';
           const result = await post(API.shell, { action, origin: window.location.origin });
           setShell(result);
         } catch (failure) {
           setShell((prev) => ({ ...(prev || {}), error: String(failure?.message || failure) }));
-        } finally {
           setShellBusy(false);
+          return;
+        }
+        setShellBusy(false);
+        if (action !== 'launch') return;
+        // 桌面壳是独立进程，冷启动得一两秒才把窗口画出来。
+        // 这期间界面里这只先别急着隐身，不然就是「点了放她到桌面，人没了」。
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+          const next = await getJson(API.shell).catch(() => null);
+          if (!next) continue;
+          setShell(next);
+          if (next.external || !next.running) {
+            if (!next.external && !next.running) {
+              setShell((prev) => ({ ...(prev || {}), error: '桌面壳没起来，再点一次试试（或看看 PowerShell 是否被拦）' }));
+            }
+            break;
+          }
         }
       };
 
@@ -656,9 +697,9 @@ window.__ModuleLoader__.load({
               h('button', { className: 'fj-btn', type: 'button', onClick: () => { void openStudy(); }, 'aria-label': '逐句读这部经' }, '逐句读'),
               shell?.supported
                 ? h('button', {
-                  className: 'fj-btn', type: 'button', disabled: shellBusy, onClick: () => { void toggleShell(); },
-                  title: shell?.running ? '收回桌面上的莲鲸' : '让她作为一个独立窗口站到桌面上，关掉 DSH 也还在',
-                }, shellBusy ? '开关中…' : shell?.running ? '收回桌宠' : '放她到桌面')
+                  className: 'fj-btn', type: 'button', disabled: shellBusy || shellStarting, onClick: () => { void toggleShell(); },
+                  title: shellUp ? '收回桌面上的莲鲸' : shellStarting ? '正在叫她出来，窗口一两秒就出来' : '让她作为一个独立窗口站到桌面上，浮在所有窗口最上层，关掉 DSH 也还在',
+                }, shellBusy ? '开关中…' : shellStarting ? '叫她出来中…' : shellUp ? '收回桌宠' : '放她到桌面')
                 : null,
               h('button', { className: 'fj-btn', type: 'button', onClick: close, 'aria-label': '收起这页' }, '收起'),
               h('button', {
@@ -693,7 +734,7 @@ window.__ModuleLoader__.load({
       const style = pos ? { left: pos.x, top: pos.y } : { right: 20, bottom: 96 };
 
       // 桌面壳站着的时候，界面里的那只就隐身，只留一枚收回按钮
-      if (shell?.running) {
+      if (shellUp) {
         return h('button', {
           type: 'button', onClick: () => { void toggleShell(); },
           title: '收回桌面上的莲鲸',
@@ -723,6 +764,7 @@ window.__ModuleLoader__.load({
               if (suppress.current) { suppress.current = false; return; }
               if (open) { close(); return; }
               pinned.current = history[0]?.id || null;
+              look(400); // 先抬眼「哦，是你」，再低头捧经
               setOpen(true);
             },
             role: 'button',
@@ -732,6 +774,7 @@ window.__ModuleLoader__.load({
               event.preventDefault();
               if (open) { close(); return; }
               pinned.current = history[0]?.id || null;
+              look(400); // 先抬眼「哦，是你」，再低头捧经
               setOpen(true);
             },
             'aria-label': `莲鲸，${unread ? `${unread} 条未读经文` : '没有新经文'}，点开或收起`,

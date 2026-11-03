@@ -214,6 +214,24 @@ check('壳心跳带 pid 能收回', shellSource.includes('pid = $PID') && hostSo
 check('卡片拦下冒泡，点按钮不会收起', /className: 'fj-card'[\s\S]{0,700}?onClick: \(event\) => event\.stopPropagation\(\)/.test(clientJs));
 check('卡片入场动画不再覆盖定位', !/@keyframes fj-in\{from\{opacity:0;transform/.test(clientJs));
 
+console.log('desktop handover / multi monitor');
+// 壳是独立进程，冷启动一两秒才画出窗口；这期间网页里那只不能先隐身，否则「点了就人没了」
+check('站起来以心跳为准', clientJs.includes('shell?.running && shell?.external') && hostSource.includes('external: beat'));
+check('启动期间还在=', clientJs.includes('shellStarting') && clientJs.includes('叫她出来中'));
+check('壳冷启动后会自己落位', clientJs.includes('getJson(API.shell)') && clientJs.includes('deadline'));
+// SystemParameters.WorkArea 只认主屏：DSH 在副屏时她会跑到另一块屏，看着像消失
+check('壳按光标所在屏落位', shellSource.includes('Get-CursorWorkArea') && shellSource.includes('Screen]::FromPoint'));
+check('壳认所有屏幕', shellSource.includes('AllScreens') && !/function Test-OnScreen \{[\s\S]{0,200}SystemParameters/.test(shellSource));
+check('拖动也按所在屏夹', /function Move-PetTo[\s\S]{0,400}Get-CursorWorkArea/.test(shellSource));
+
+console.log('eyes');
+// 闭眼入定 / 垂目看经 / 睁眼看你：睁眼只在跟人发生关系的一拍
+check('睁眼有到期时间', clientJs.includes('lookUntil') && clientJs.includes('setLookUntil'));
+check('点开会先抬眼', /if \(open\) \{ close\(\); return; \}\s*\n\s*pinned\.current = history\[0\]\?\.id \|\| null;\s*\n\s*look\(400\)/.test(clientJs));
+check('收起会抬眼', /const close = \(\) => \{[\s\S]{0,200}look\(600\)/.test(clientJs));
+check('未读不常亮，间歇抬眼', clientJs.includes('now % 20000') && shellSource.includes('Second % 20'));
+check('壳也有眼神节拍', shellSource.includes('Update-PetImage') && shellSource.includes('$lookTimer'));
+
 console.log('');
 if (failures) {
   console.log(`失败 ${failures} 项`);
