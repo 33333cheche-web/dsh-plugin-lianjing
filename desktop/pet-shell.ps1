@@ -26,6 +26,13 @@ $ImportUrl  = "$Origin/dsh-fojing-pet/import"
 $BeatUrl   = "$Origin/dsh-fojing-pet/heartbeat"
 $CatalogUrl = "$Origin/dsh-fojing-pet/catalog.json"
 $WorkUrl  = "$Origin/dsh-fojing-pet/work.json"
+# 敲木鱼：一次彩头 + 一段随包音效（启动时下到临时目录，之后不再联网取）
+$MuyuUrl   = "$Origin/dsh-fojing-pet/muyu"
+$MuyuWavUrl = "$Origin/dsh-fojing-pet/muyu.wav"
+$MuyuWavPath = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-fojing-pet-muyu-' + $PID + '.wav')
+# 敲木鱼那一瞬间换的立绘：宿主把 knock 加进 SPRITES，壳这边按名字取；404 就静默用回原图
+$KnockSpriteUrl = "$Origin/dsh-fojing-pet/asset.png?name=knock"
+$KnockSpriteTemp = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-fojing-pet-knock-' + $PID + '.png')
 
 $PetHeight  = 210
 $CardHeight = 470
@@ -159,11 +166,31 @@ function Get-NextRunLeft {
   return 0
 }
 
+# 「还要等多久」用人话写：明天再读 / 7 小时 17 分后再读 / 43 分后再读 / 1 分钟内
+# 不写秒：桌面上那串 437:01 会被读成四百多个小时。
+function Format-RunLeft {
+  param($Value)
+  $left = 0.0
+  try { $left = [double]$Value } catch { $left = 0 }
+  if ($left -le 0) { return '' }
+  if ($left -lt 60) { return '1 分钟内' }
+  if ($left -lt 3600) { return ('{0} 分后再读' -f [int][Math]::Floor($left / 60)) }
+  if ($left -lt 86400) {
+    $hours = [int][Math]::Floor($left / 3600)
+    $mins = [int][Math]::Floor(($left - $hours * 3600) / 60)
+    if ($mins -le 0) { return ('{0} 小时后' -f $hours) }
+    return ('{0} 小时 {1} 分后再读' -f $hours, $mins)
+  }
+  $days = [int][Math]::Floor($left / 86400)
+  if ($days -eq 1) { return '明天再读' }
+  return ('{0} 天后再读' -f $days)
+}
+
 # 经书选择用的圆角小胶囊
 function New-SutraChip {
   param([string]$Title, [string]$SutraId, [bool]$Active, [string]$Tip)
   $chip = New-Object System.Windows.Controls.Border
-  $chip.CornerRadius = New-Object System.Windows.CornerRadius 999
+  $chip.CornerRadius = New-Object System.Windows.CornerRadius 6
   $chip.Padding = (New-Thickness '10,3,10,4')
   $chip.Margin = (New-Thickness '0,0,5,5')
   $chip.BorderThickness = (New-Thickness '1')
@@ -523,6 +550,11 @@ $petBrush.Stretch = 'Uniform'
 $petImage.Background = $petBrush
 $petHost.Children.Add($petImage) | Out-Null
 
+# 飘字层：敲木鱼的「功德 +1」在这一层往上飘。纯装饰，绝不参与命中测试。
+$floatLayer = New-Object System.Windows.Controls.Canvas
+$floatLayer.IsHitTestVisible = $false
+$petHost.Children.Add($floatLayer) | Out-Null
+
 $badge = New-Object System.Windows.Controls.Border
 $badge.CornerRadius = New-Object System.Windows.CornerRadius 9
 $badge.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($Accent)))
@@ -541,7 +573,7 @@ $stack.Children.Add($petHost) | Out-Null
 # 立绘下面的小标签：跟网页里的 .fj-tag 同一套语义（状态点 + 一行字）。
 # 有功课在跑时改成「N 个在跑」；否则保持原来的说法：静坐中 / 翻经中 / MM:SS 后再读。
 $tagBorder = New-Object System.Windows.Controls.Border
-$tagBorder.CornerRadius = New-Object System.Windows.CornerRadius 999
+$tagBorder.CornerRadius = New-Object System.Windows.CornerRadius 6
 $tagBorder.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#FFFBF2')))
 $tagBorder.BorderThickness = New-Object System.Windows.Thickness 1
 $tagBorder.BorderBrush = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#E2D3B6')))
@@ -562,7 +594,27 @@ $tagText.VerticalAlignment = 'Center'
 $tagLine.Children.Add($tagDot) | Out-Null
 $tagLine.Children.Add($tagText) | Out-Null
 $tagBorder.Child = $tagLine
-$stack.Children.Add($tagBorder) | Out-Null
+
+# 小标签一行：状态标签 + 「已敲 N 下」（敲过才出现）
+$tagRow = New-Object System.Windows.Controls.StackPanel
+$tagRow.Orientation = 'Horizontal'
+$tagRow.HorizontalAlignment = 'Center'
+$tagRow.Children.Add($tagBorder) | Out-Null
+
+$knockBorder = New-Object System.Windows.Controls.Border
+$knockBorder.CornerRadius = New-Object System.Windows.CornerRadius 6
+$knockBorder.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#FFFBF2')))
+$knockBorder.BorderThickness = New-Object System.Windows.Thickness 1
+$knockBorder.BorderBrush = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#E2D3B6')))
+$knockBorder.Padding = New-Object System.Windows.Thickness 9, 2, 9, 3
+$knockBorder.Margin = New-Object System.Windows.Thickness 6, 3, 0, 2
+$knockBorder.Visibility = 'Collapsed'
+$knockText = New-Text -Text '已积功德 0' -Size 10 -Color '#7A6A4E' -Weight 'Bold'
+$knockText.VerticalAlignment = 'Center'
+$knockBorder.Child = $knockText
+$tagRow.Children.Add($knockBorder) | Out-Null
+
+$stack.Children.Add($tagRow) | Out-Null
 
 # --- 状态 -------------------------------------------------------------------
 $script:State = $null
@@ -571,7 +623,7 @@ $script:ShowingStudy = $false
 $script:Sutra = $null
 
 # --- 功课面板状态 -----------------------------------------------------------
-$script:CardTab = 'read'         # read | work
+$script:CardTab = 'work'         # work | read（功课是默认页，tab 排在左边）
 $script:WorkData = $null         # 最近一次成功拉到的 work.json
 $script:WorkFailed = $false      # 上一拍失败（有旧数据就继续用旧的）
 $script:WorkOpenId = ''          # 展开的那一行（同一时间只展开一行）
@@ -583,6 +635,7 @@ $script:NextWorkAt = [DateTime]::MinValue
 $spriteIdle = Join-Path $AssetDir 'pet-idle.png'
 $spriteOpen = Join-Path $AssetDir 'pet-open.png'
 $spriteRead = Join-Path $AssetDir 'pet-read.png'
+$spriteKnock = Join-Path $AssetDir 'pet-knock.png'
 
 function Set-PetImage {
   param([string]$Kind)
@@ -591,8 +644,11 @@ function Set-PetImage {
   $path = switch ($Kind) {
     'open' { $spriteOpen }
     'read' { $spriteRead }
+    'knock' { $script:KnockSpritePath }
     default { $spriteIdle }
   }
+  # 没有敲木鱼那张图（还没生成/没下到）就保持原样，不换、不报错
+  if ($Kind -eq 'knock' -and (-not $path -or -not (Test-Path $path))) { return }
   if (-not (Test-Path $path)) { $path = $spriteIdle }
   if (-not (Test-Path $path)) { return }
   $bmp = New-Object System.Windows.Media.Imaging.BitmapImage
@@ -617,6 +673,8 @@ function Set-Look {
 }
 
 function Update-PetImage {
+  # 敲木鱼的 420ms 里别抢图
+  if ($script:KnockUntil -ne [DateTime]::MinValue -and [DateTime]::Now -lt $script:KnockUntil) { return }
   if ([DateTime]::Now -lt $script:LookUntil) { Set-PetImage 'open'; return }
   if ($script:ShowingStudy -or $script:ShowingCard) { Set-PetImage 'read'; return }
   # 有未读不常亮（那是干瞪眼）：每 20 秒抬眼看你两三秒就走
@@ -835,6 +893,8 @@ function Refresh-State {
       $badge.Visibility = 'Collapsed'
     }
     Update-PetImage
+    Update-KnockCount
+    Request-KnockSprite
     return $true
   } catch {
     Show-Error '连不上 DSH，显示的是最后一条'
@@ -941,6 +1001,354 @@ function Update-Work {
   }
 }
 
+# --- 敲木鱼 -------------------------------------------------------------------
+# 点立绘正中间 = 敲一下：立刻出声 + 飘一行彩头。彩头要 POST 换，所以和拉数据
+# 一样丢到后台 runspace，UI 线程只负责「排队 → 到点在画面上飘字」。
+$script:KnockQueue = [System.Collections.Generic.Queue[int]]::new()
+$script:KnockPending = $null
+$script:KnockRunspace = $null
+$script:KnockSound = $null      # SoundPlayer，启动时下好 19KB 的 wav 预加载
+$script:KnockCount = 0          # 服务端返回的累计敲击数
+$script:KnockFloats = New-Object System.Collections.ArrayList
+$script:FloatSeed = 0
+$script:WavPending = $null
+$script:WavRunspace = $null
+$script:KnockSpritePath = ''      # 敲木鱼那张立绘（本地资产优先，其次临时目录里下到的）
+$script:KnockSpriteTried = [DateTime]::MinValue
+$script:KnockUntil = [DateTime]::MinValue   # 敲击立绘显示到什么时候（420ms 后换回去）
+$script:KnockPrevKind = ''        # 敲之前是什么图，就回什么图
+try {
+  if (Test-Path $spriteKnock) { $script:KnockSpritePath = $spriteKnock }
+  else { $script:KnockSpritePath = $KnockSpriteTemp }
+} catch { $script:KnockSpritePath = '' }
+
+# 预取脚本：wav 和 knock 立绘各下各的，一个 404 不影响另一个
+$script:AssetFetchScript = @'
+param([string]$WavUrl, [string]$WavPath, [bool]$WantWav, [string]$SpriteUrl, [string]$SpritePath, [bool]$WantSprite)
+$ErrorActionPreference = 'Continue'
+if ($WantWav) {
+  try { Invoke-WebRequest -Method 'GET' -Uri $WavUrl -Headers @{ 'x-dsh-fojing-pet' = '1' } -OutFile $WavPath -UseBasicParsing -TimeoutSec 6 } catch { }
+}
+if ($WantSprite) {
+  try { Invoke-WebRequest -Method 'GET' -Uri $SpriteUrl -Headers @{ 'x-dsh-fojing-pet' = '1' } -OutFile $SpritePath -UseBasicParsing -TimeoutSec 6 } catch { }
+}
+'@
+
+function Show-KnockFloat {
+  param([string]$Label = '功德', [int]$Amount = 1)
+  # 纯装饰：一张小纸条从头顶往上飘 52 DIP 并淡出，950ms 后由 Update-Knocks 收走
+  try {
+    $w = [double]$floatLayer.ActualWidth
+    $h = [double]$floatLayer.ActualHeight
+    if ($w -le 0 -or $h -le 0) { return }
+    # 连敲时左右错开，别叠成一坨
+    $spread = @(-70, 0, 70, -35, 35)
+    $off = [double]$spread[$script:FloatSeed % $spread.Count]
+    $script:FloatSeed = ($script:FloatSeed + 1) % 60000
+
+    # 一张正经小纸条：圆角 10、1px 描边、很轻的投影；不用 999（小字号会变橄榄球）
+    $pill = New-Object System.Windows.Controls.Border
+    $pill.CornerRadius = New-Object System.Windows.CornerRadius 6
+    $pill.Background = New-Brush '#FFFBF2'
+    $pill.BorderThickness = New-Object System.Windows.Thickness 1
+    $pill.BorderBrush = New-Brush '#E2D3B6'
+    $pill.Padding = New-Object System.Windows.Thickness 12, 3, 12, 4
+    $pill.IsHitTestVisible = $false
+    $shadow = New-Object System.Windows.Media.Effects.DropShadowEffect
+    $shadow.BlurRadius = 10
+    $shadow.Opacity = 0.12
+    $shadow.ShadowDepth = 2
+    $pill.Effect = $shadow
+
+    $tb = New-Object System.Windows.Controls.TextBlock
+    $tb.FontFamily = New-Object System.Windows.Media.FontFamily 'Microsoft YaHei'
+    $tb.FontSize = 12
+    $tb.FontWeight = ConvertTo-FontWeight 'SemiBold'
+    $tb.TextWrapping = 'NoWrap'
+    $runLabel = New-Object System.Windows.Documents.Run $Label
+    $runLabel.Foreground = New-Brush '#5C5A54'
+    $runAmount = New-Object System.Windows.Documents.Run (' +' + $Amount)
+    $runAmount.Foreground = New-Brush '#A79E8C'
+    $tb.Inlines.Add($runLabel) | Out-Null
+    $tb.Inlines.Add($runAmount) | Out-Null
+    $pill.Child = $tb
+
+    $pill.Measure([System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))
+    $pw = [double]$pill.DesiredSize.Width
+    [System.Windows.Controls.Canvas]::SetLeft($pill, ($w / 2) - ($pw / 2) + $off)
+    [System.Windows.Controls.Canvas]::SetTop($pill, ($h * 0.30))
+    $floatLayer.Children.Add($pill) | Out-Null
+
+    $tt = New-Object System.Windows.Media.TranslateTransform
+    $pill.RenderTransform = $tt
+    $animY = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $animY.From = 0.0
+    $animY.To = -52.0
+    $animY.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(900))
+    $ease = New-Object System.Windows.Media.Animation.QuadraticEase
+    $ease.EasingMode = 'EaseOut'
+    $animY.EasingFunction = $ease
+    $tt.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $animY)
+
+    $animO = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $animO.From = 1.0
+    $animO.To = 0.0
+    $animO.BeginTime = [TimeSpan]::FromMilliseconds(320)
+    $animO.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(580))
+    $pill.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $animO)
+
+    $script:KnockFloats.Add(@{ el = $pill; until = [DateTime]::Now.AddMilliseconds(950) }) | Out-Null
+  } catch { }
+}
+
+# 木鱼功德总数：网页和壳看同一份账（muyuCount），刚敲的那几下用本地 count 补上
+function Get-MuyuTotal {
+  $total = 0
+  try {
+    if ($script:State -and $null -ne $script:State.muyuCount) { $total = [int]$script:State.muyuCount }
+  } catch { $total = 0 }
+  if ($script:KnockCount -gt $total) { $total = $script:KnockCount }
+  if ($total -lt 0) { $total = 0 }
+  return $total
+}
+
+# 功课页底部那行：有功德就报功德，没有就说数字的来源
+function Update-WorkNote {
+  try {
+    if ($script:WorkFailed) { $txtWorkNote.Text = '读不到最新功课 · 显示的是上次的'; return }
+    $total = Get-MuyuTotal
+    if ($total -gt 0) { $txtWorkNote.Text = ('已积功德 {0}' -f $total) }
+    else { $txtWorkNote.Text = '数字来自 DSH 会话日志' }
+  } catch { }
+}
+
+function Update-KnockCount {
+  try {
+    $total = Get-MuyuTotal
+    if ($total -gt 0) {
+      $knockText.Text = ('已积功德 {0}' -f $total)
+      $knockBorder.Visibility = 'Visible'
+    } else {
+      $knockBorder.Visibility = 'Collapsed'
+    }
+    Update-WorkNote
+  } catch { }
+}
+
+function Request-KnockSprite {
+  # 立绘不是必须的：没下到就一直用原来的图，悄悄重试，不打扰人
+  try {
+    if (-not $script:KnockSpritePath) { return }
+    if (Test-Path $script:KnockSpritePath) { return }
+    if ($script:WavPending) { return }
+    if ([DateTime]::Now -lt $script:KnockSpriteTried) { return }
+    $script:KnockSpriteTried = [DateTime]::Now.AddSeconds(60)
+    Start-WavFetch
+  } catch { }
+}
+
+function Show-KnockSprite {
+  try {
+    if (-not $script:KnockSpritePath) { return }
+    if (-not (Test-Path $script:KnockSpritePath)) { return }
+    if ($script:PetKind -ne 'knock') { $script:KnockPrevKind = [string]$script:PetKind }
+    Set-PetImage 'knock'
+    # 淡入一下（0.55 → 1，120ms），不闪白
+    $fade = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $fade.From = 0.55
+    $fade.To = 1.0
+    $fade.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(120))
+    $petImage.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
+    $script:KnockUntil = [DateTime]::Now.AddMilliseconds(420)
+  } catch { }
+}
+
+function Restore-PetSprite {
+  if ($script:KnockUntil -eq [DateTime]::MinValue) { return }
+  if ([DateTime]::Now -lt $script:KnockUntil) { return }
+  $script:KnockUntil = [DateTime]::MinValue
+  try {
+    $back = [string]$script:KnockPrevKind
+    if (-not $back -or $back -eq 'knock') { $back = 'idle' }
+    Set-PetImage $back
+  } catch { }
+}
+
+function Start-WavFetch {
+  # 启动只下一次：音效 19KB + 敲木鱼立绘，都落到临时目录，成功就预加载
+  if ($script:WavPending) { return }
+  $wantWav = ($null -eq $script:KnockSound)
+  $wantSprite = (-not (Test-Path $script:KnockSpritePath)) -and (-not (Test-Path $spriteKnock))
+  if (-not $wantWav -and -not $wantSprite) { return }
+  try {
+    $rsState = ''
+    if ($script:WavRunspace) { $rsState = [string]$script:WavRunspace.RunspaceStateInfo.State }
+    if ($rsState -ne 'Opened') {
+      try { if ($script:WavRunspace) { $script:WavRunspace.Dispose() } } catch { }
+      $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+      $rs = [runspacefactory]::CreateRunspace($iss)
+      $rs.Open()
+      $script:WavRunspace = $rs
+    }
+    $ps = [powershell]::Create()
+    $ps.Runspace = $script:WavRunspace
+    [void]$ps.AddScript($script:AssetFetchScript)
+    [void]$ps.AddArgument($MuyuWavUrl)
+    [void]$ps.AddArgument($MuyuWavPath)
+    [void]$ps.AddArgument([bool]$wantWav)
+    [void]$ps.AddArgument($KnockSpriteUrl)
+    [void]$ps.AddArgument($KnockSpriteTemp)
+    [void]$ps.AddArgument([bool]$wantSprite)
+    $handle = $ps.BeginInvoke()
+    $script:WavPending = @{ ps = $ps; handle = $handle; at = [DateTime]::Now }
+  } catch {
+    $script:WavPending = $null
+  }
+}
+
+function Complete-WavFetch {
+  if (-not $script:WavPending) { return }
+  $pending = $script:WavPending
+  if (-not $pending.handle.IsCompleted) {
+    # 兜底：下载卡住就丢掉，不能拖着一辈子
+    if (([DateTime]::Now - $pending.at).TotalSeconds -gt 8) {
+      $script:WavPending = $null
+      try { $pending.ps.Stop() } catch { }
+      try { $pending.ps.Dispose() } catch { }
+    }
+    return
+  }
+  $script:WavPending = $null
+  try {
+    $null = $pending.ps.EndInvoke($pending.handle)
+    if ((-not $script:KnockSound) -and (Test-Path $MuyuWavPath)) {
+      $player = New-Object System.Media.SoundPlayer -ArgumentList $MuyuWavPath
+      $player.Load()
+      $script:KnockSound = $player
+    }
+  } catch {
+    # 下不到/放不了就静默：敲木鱼照样有飘字，只是没声
+    $script:KnockSound = $null
+  } finally {
+    try { $pending.ps.Dispose() } catch { }
+  }
+  try {
+    if (Test-Path $spriteKnock) { $script:KnockSpritePath = $spriteKnock }
+    elseif (Test-Path $KnockSpriteTemp) { $script:KnockSpritePath = $KnockSpriteTemp }
+  } catch { }
+}
+
+function Start-KnockFetch {
+  if ($script:KnockPending) { return }
+  if ($script:KnockQueue.Count -eq 0) { return }
+  try {
+    $rsState = ''
+    if ($script:KnockRunspace) { $rsState = [string]$script:KnockRunspace.RunspaceStateInfo.State }
+    if ($rsState -ne 'Opened') {
+      try { if ($script:KnockRunspace) { $script:KnockRunspace.Dispose() } } catch { }
+      $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+      $rs = [runspacefactory]::CreateRunspace($iss)
+      $rs.Open()
+      $script:KnockRunspace = $rs
+    }
+    # 防跨站守卫要求：带 x-dsh-fojing-pet 头 + application/json + 一个 json body
+    $knockScript = @'
+param([string]$Url)
+$ErrorActionPreference = 'Stop'
+Invoke-RestMethod -Method 'POST' -Uri $Url -Headers @{ 'x-dsh-fojing-pet' = '1' } -ContentType 'application/json' -Body '{}' -TimeoutSec 5
+'@
+    $ps = [powershell]::Create()
+    $ps.Runspace = $script:KnockRunspace
+    [void]$ps.AddScript($knockScript)
+    [void]$ps.AddArgument($MuyuUrl)
+    $handle = $ps.BeginInvoke()
+    $script:KnockPending = @{ ps = $ps; handle = $handle; at = [DateTime]::Now }
+  } catch {
+    # 连请求都发不出去：照旧本地给一句，别让敲下去没反应
+    $script:KnockPending = $null
+    if ($script:KnockQueue.Count -gt 0) { [void]$script:KnockQueue.Dequeue() }
+    $names = @('功德', '财富', '桃花运', '好运', '健康')
+    Show-KnockFloat -Label $names[(Get-Random -Minimum 0 -Maximum $names.Count)] -Amount 1
+  }
+}
+
+function Complete-KnockFetch {
+  if (-not $script:KnockPending) { return }
+  $pending = $script:KnockPending
+  if (-not $pending.handle.IsCompleted) {
+    if (([DateTime]::Now - $pending.at).TotalSeconds -gt 10) {
+      $script:KnockPending = $null
+      try { $pending.ps.Stop() } catch { }
+      try { $pending.ps.Dispose() } catch { }
+      if ($script:KnockQueue.Count -gt 0) { [void]$script:KnockQueue.Dequeue() }
+      $names = @('功德', '财富', '桃花运', '好运', '健康')
+      Show-KnockFloat -Label $names[(Get-Random -Minimum 0 -Maximum $names.Count)] -Amount 1
+    }
+    return
+  }
+  $script:KnockPending = $null
+  $payload = $null
+  try {
+    $out = $pending.ps.EndInvoke($pending.handle)
+    if ($out -and $out.Count -gt 0) { $payload = $out[0] }
+  } catch {
+    $payload = $null
+  } finally {
+    try { $pending.ps.Dispose() } catch { }
+  }
+
+  if ($script:KnockQueue.Count -gt 0) { [void]$script:KnockQueue.Dequeue() }
+  $label = ''
+  $amount = 1
+  if ($payload -and $payload.ok) {
+    $label = [string]$payload.label
+    if (-not $label) { $label = '功德' }
+    try { $amount = [int]$payload.amount } catch { $amount = 1 }
+    if ($amount -le 0) { $amount = 1 }
+    try {
+      if ($null -ne $payload.count) {
+        $script:KnockCount = [int]$payload.count
+        Update-KnockCount
+      }
+    } catch { }
+  } else {
+    # 没换成：本地随机一个彩头，只飘字，不写累计
+    $names = @('功德', '财富', '桃花运', '好运', '健康')
+    $label = $names[(Get-Random -Minimum 0 -Maximum $names.Count)]
+  }
+  Show-KnockFloat -Label $label -Amount $amount
+}
+
+function Update-Knocks {
+  # 每 150ms 一拍：收 wav 下载结果、收 POST 彩头、清掉飘完的字
+  Complete-WavFetch
+  Complete-KnockFetch
+  Restore-PetSprite
+  if ($script:KnockFloats.Count -gt 0) {
+    for ($i = $script:KnockFloats.Count - 1; $i -ge 0; $i--) {
+      if ([DateTime]::Now -ge $script:KnockFloats[$i].until) {
+        try { [void]$floatLayer.Children.Remove($script:KnockFloats[$i].el) } catch { }
+        $script:KnockFloats.RemoveAt($i)
+      }
+    }
+  }
+  if (-not $script:KnockPending -and $script:KnockQueue.Count -gt 0) { Start-KnockFetch }
+}
+
+function Invoke-MuyuKnock {
+  # 先换表情、再出声：都是本地预加载的，不用等网络
+  Show-KnockSprite
+  try { if ($script:KnockSound) { $script:KnockSound.Play() } } catch { }
+  if ($script:KnockQueue.Count -ge 12) {
+    # 点太疯了：不排队，但照样给一句，手感不断
+    $names = @('功德', '财富', '桃花运', '好运', '健康')
+    Show-KnockFloat -Label $names[(Get-Random -Minimum 0 -Maximum $names.Count)] -Amount 1
+    return
+  }
+  $script:KnockQueue.Enqueue(1) | Out-Null
+  if (-not $script:KnockPending) { Start-KnockFetch }
+}
+
 # 数据指纹：只放「肉眼能看出来变化」的字段，token 每 5 秒抖一点不该导致整页重建。
 function Get-WorkSignature {
   $bits = New-Object System.Collections.Generic.List[string]
@@ -993,7 +1401,7 @@ function Update-PetTag {
     } else {
       $left = Get-NextRunLeft
       if ($left -gt 0) {
-        $tagText.Text = ('{0}:{1:00} 后再读' -f [int][Math]::Floor($left / 60), [int][Math]::Floor($left % 60))
+        $tagText.Text = (Format-RunLeft $left)
       } else {
         $tagText.Text = '静坐中'
       }
@@ -1006,7 +1414,7 @@ function Update-PetTag {
 function New-TabChip {
   param([string]$Label, [string]$Key, [bool]$Active)
   $chip = New-Object System.Windows.Controls.Border
-  $chip.CornerRadius = New-Object System.Windows.CornerRadius 999
+  $chip.CornerRadius = New-Object System.Windows.CornerRadius 6
   $chip.Padding = (New-Thickness '11,3,11,4')
   $chip.Margin = (New-Thickness '0,0,6,0')
   $chip.BorderThickness = (New-Thickness '1')
@@ -1034,13 +1442,14 @@ function New-TabChip {
 
 function Update-TabBar {
   $tabBar.Children.Clear()
-  $tabBar.Children.Add((New-TabChip -Label '今日读经' -Key 'read' -Active ($script:CardTab -eq 'read'))) | Out-Null
+  # 功课在左，是默认页；读经挪到右边
   $tabBar.Children.Add((New-TabChip -Label '功课' -Key 'work' -Active ($script:CardTab -eq 'work'))) | Out-Null
+  $tabBar.Children.Add((New-TabChip -Label '今日读经' -Key 'read' -Active ($script:CardTab -eq 'read'))) | Out-Null
 }
 
 function Set-CardTab {
-  param([string]$Tab = 'read')
-  if ($Tab -ne 'work') { $Tab = 'read' }
+  param([string]$Tab = 'work')
+  if ($Tab -ne 'read') { $Tab = 'work' }
   $script:CardTab = $Tab
   Update-TabBar
   if ($Tab -eq 'work') {
@@ -1067,6 +1476,14 @@ function Set-CardTab {
     $btnRefresh.Visibility = 'Collapsed'
     $cardBorder.MaxHeight = $CardHeight
     Render-Card
+    # 切到读经页就等于「看了」：把当前那条标成已读。
+    # 默认页从读经改成功课后，这个动作挪到这里，读经页本身的渲染逻辑没动。
+    if ($script:ShowingCard) {
+      $shown = Get-PageCard
+      if ($shown -and -not $shown.read) {
+        try { Invoke-PetApi -Method 'POST' -Url $ReadUrl -Body @{ id = $shown.id } | Out-Null } catch { }
+      }
+    }
   }
   $scroll.UpdateLayout()
   $scroll.ScrollToVerticalOffset(0)
@@ -1389,7 +1806,7 @@ function Render-Work {
 
   if (-not $script:WorkData) {
     $txtWorkMeta.Text = ''
-    $txtWorkNote.Text = ''
+    Update-WorkNote
     $hint = '正在读功课…'
     if ($script:WorkFailed) { $hint = '读不到功课 · 稍后再试' }
     $empty = New-Text -Text $hint -Size 12 -Color '#A08A68' -Margin '10,16,10,20'
@@ -1418,7 +1835,7 @@ function Render-Work {
     $idle = New-Text -Text '没有会话在等你，先歇一会儿' -Size 10 -Color '#B3A78F' -Margin '10,0,10,18'
     $idle.HorizontalAlignment = 'Center'
     $workList.Children.Add($idle) | Out-Null
-    $txtWorkNote.Text = ''
+    Update-WorkNote
     $scroll.UpdateLayout()
     $scroll.ScrollToVerticalOffset($offset)
     return
@@ -1459,10 +1876,7 @@ function Render-Work {
     $shown++
   }
 
-  $note = ''
-  if ($script:WorkFailed) { $note = '读不到最新功课 · 显示的是上次的' }
-  elseif ($total -gt $shown) { $note = "共 $total 个会话 · 只列最近 $shown 个" }
-  $txtWorkNote.Text = $note
+  Update-WorkNote
 
   $scroll.UpdateLayout()
   $scroll.ScrollToVerticalOffset($offset)
@@ -1498,7 +1912,9 @@ function Toggle-Card {
     Set-Look 400   # 先抬眼「哦，是你」，再低头捧经
     Set-CardSize $true
     Refresh-State | Out-Null
-    # 读经页 / 功课页各自重建一次；功课页保留上次展开的那一行
+    # 每次展开都落在功课页（默认页）；读经页只能从 tab 点进去
+    $script:CardTab = 'work'
+    # 功课页保留上次展开的那一行，收起再打开也能接着看
     Set-CardTab $script:CardTab
     Fit-WindowHeight
     Update-PetImage
@@ -1642,10 +2058,29 @@ $petImage.Add_MouseLeftButtonUp({
       Set-Look 400   # 放下了，看你一眼
       Move-PetTo -Left $window.Left -Top $window.Top   # 拖完拉回屏内
     } else {
-      Toggle-Card
+      # 点正中间（身体那块椭圆）敲木鱼；点四周/头部/边缘仍然是展开卡片
+      $inBody = $false
+      try {
+        $pos = $_.GetPosition($petImage)
+        $w = [double]$petImage.ActualWidth
+        $h = [double]$petImage.ActualHeight
+        if ($w -gt 0 -and $h -gt 0) {
+          # 椭圆：中心在图片中心偏下（宽 50%、高 56%），半轴 宽×0.30 / 高×0.26
+          $nx = ($pos.X - ($w / 2)) / ($w * 0.30)
+          $ny = ($pos.Y - ($h * 0.56)) / ($h * 0.26)
+          if (($nx * $nx + $ny * $ny) -le 1.0) { $inBody = $true }
+        }
+      } catch { $inBody = $false }
+      if ($inBody) { Invoke-MuyuKnock } else { Toggle-Card }
     }
     $_.Handled = $true
   })
+
+# 小标签 / 敲击数是「大目标」：点它们也展开或收起卡片（立绘中间留给木鱼）
+$tagBorder.Cursor = [System.Windows.Input.Cursors]::Hand
+$knockBorder.Cursor = [System.Windows.Input.Cursors]::Hand
+$tagBorder.Add_MouseLeftButtonUp({ try { Toggle-Card } catch { } })
+$knockBorder.Add_MouseLeftButtonUp({ try { Toggle-Card } catch { } })
 
 $btnClose.Add_Click({ Toggle-Card })
 $btnNext.Add_Click({ Invoke-Next })
@@ -1727,6 +2162,13 @@ $workTimer.Interval = [TimeSpan]::FromMilliseconds(600)
 $workTimer.Add_Tick({ try { Update-Work } catch { } })
 $workTimer.Start()
 
+# --- 敲木鱼节拍 -------------------------------------------------------------
+# 150ms 一拍：收音效下载结果、收 POST 彩头、清掉飘完的字；网络全在 runspace 里。
+$knockTimer = New-Object System.Windows.Threading.DispatcherTimer
+$knockTimer.Interval = [TimeSpan]::FromMilliseconds(150)
+$knockTimer.Add_Tick({ try { Update-Knocks } catch { } })
+$knockTimer.Start()
+
 # --- 轮询 -------------------------------------------------------------------
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(20)
@@ -1747,6 +2189,7 @@ $window.Add_Loaded({
     Refresh-State | Out-Null
     Update-PetTag
     Request-WorkUpdate
+    Start-WavFetch        # 音效只下一次，之后用本地预加载的 SoundPlayer
     Send-Heartbeat
   })
 
@@ -1766,6 +2209,34 @@ $window.Add_Closed({
         $script:WorkRunspace = $null
       }
     } catch { }
+    # 木鱼的请求 / 音效下载 / 临时 wav 一起收掉，别留孤儿线程和临时文件
+    try {
+      if ($script:KnockPending) {
+        $script:KnockPending.ps.Stop()
+        $script:KnockPending.ps.Dispose()
+        $script:KnockPending = $null
+      }
+      if ($script:WavPending) {
+        $script:WavPending.ps.Stop()
+        $script:WavPending.ps.Dispose()
+        $script:WavPending = $null
+      }
+    } catch { }
+    try {
+      if ($script:KnockRunspace) {
+        $script:KnockRunspace.Close()
+        $script:KnockRunspace.Dispose()
+        $script:KnockRunspace = $null
+      }
+      if ($script:WavRunspace) {
+        $script:WavRunspace.Close()
+        $script:WavRunspace.Dispose()
+        $script:WavRunspace = $null
+      }
+    } catch { }
+    try { if ($script:KnockSound) { $script:KnockSound.Dispose(); $script:KnockSound = $null } } catch { }
+    try { if (Test-Path $MuyuWavPath) { Remove-Item $MuyuWavPath -Force -ErrorAction SilentlyContinue } } catch { }
+    try { if (Test-Path $KnockSpriteTemp) { Remove-Item $KnockSpriteTemp -Force -ErrorAction SilentlyContinue } } catch { }
   })
 
 # 最后一道保险：单个交互出错时把错误显示在状态行，别让整个桌宠退出。

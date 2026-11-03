@@ -263,6 +263,28 @@ check('壳拉功课不阻塞界面', shellSource.includes('Start-WorkFetch') && 
 check('数据变少窗口会缩', /function Update-Work[\s\S]{0,900}Fit-WindowHeight/.test(shellSource));
 check('壳的小标签会报在跑数', shellSource.includes('Update-PetTag') && shellSource.includes('个在跑'));
 
+console.log('敲木鱼');
+// 点她中间那一下：出声、飘一句彩头、宿主管累计
+check('卡片默认落在功课页', clientJs.includes("useState('work')") && /const close = \(\) => \{[\s\S]{0,120}setView\('work'\)/.test(clientJs));
+check('功课在左、读经在右', /const tabs = \(active\) =>[\s\S]{0,700}?'功课'[\s\S]{0,500}?'今日读经'/.test(clientJs));
+check('只认立绘中间那块', clientJs.includes('knockHit') && clientJs.includes('rect.width * 0.30') && clientJs.includes('rect.height * 0.26'));
+check('敲的时候有声音', clientJs.includes('new Audio(API.sound)') && clientJs.includes('currentTime = 0'));
+check('飘一句彩头', clientJs.includes('fj-knock') && clientJs.includes('+1'));
+check('五种彩头都在', ['功德','财富','桃花运','好运','健康'].every((word) => clientJs.includes(word)));
+check('拿不到宿主就本地随机', /MERIT_LABELS\[Math\.floor\(Math\.random\(\) \* MERIT_LABELS\.length\)\]/.test(clientJs));
+check('宿主颜色音效都随包', hostSource.includes("join(assetsDir, 'muyu.wav')") && hostSource.includes("'content-type': 'audio/wav'"));
+check('彩头由宿主随机', hostSource.includes('MERIT_KINDS') && /MERIT_KINDS\)\[Math\.floor\(Math\.random\(\)/.test(hostSource));
+check('彩头写进状态，重启不丢', hostSource.includes('merits: state.merits') && hostSource.includes('saved?.merits'));
+check('敲木鱼不用能读经', hostSource.includes("muyu: async (request)") && clientJs.includes('post(API.muyu'));
+// 437:01 这种「看起来像 400 多小时」的数字要换成说人话
+check('倒计时说人话', clientJs.includes('untilText') && clientJs.includes('小时') && clientJs.includes('分钟后再读'));
+check('页脚攒功德不数敲击', clientJs.includes('已积功德'));
+// 敲木鱼那一拍要换立绘；素材没随包时宿主退回 idle，界面不开天窗
+check('敲击有专门立绘位', hostSource.includes("knock: 'pet-knock.png'") && clientJs.includes('knocking && sprites.knock'));
+check('缺立绘安静回退', hostSource.includes('candidates') && hostSource.includes('SPRITES[sprite] || SPRITES.idle'));
+check('小纸条是正经圆角', clientJs.includes('border-radius:6px') && !clientJs.includes('border-radius:999px'));
+check('壳里的小元件也不是橄榄', !shellSource.includes('CornerRadius 999') && shellSource.includes('CornerRadius 6'));
+
 console.log('');
 if (failures) {
   console.log(`失败 ${failures} 项`);

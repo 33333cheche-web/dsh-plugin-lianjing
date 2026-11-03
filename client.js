@@ -38,7 +38,7 @@ window.__ModuleLoader__.load({
       .fj-pet:hover{transform:translateY(-4px)}
       .fj-img{display:block;height:${PET_H}px;width:auto;max-width:220px;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(60,90,88,.28));animation:fj-breathe 5.2s ease-in-out infinite}
       .fj-img[data-talking="on"]{animation:fj-bob 2.4s ease-in-out infinite}
-      .fj-tag{margin-top:-4px;font-size:10px;font-weight:700;letter-spacing:.08em;color:#3f5f5c;background:rgba(255,251,242,.94);border:1px solid rgba(190,170,135,.5);border-radius:999px;padding:2px 9px;white-space:nowrap;backdrop-filter:blur(8px);box-shadow:0 4px 10px rgba(90,110,100,.14)}
+      .fj-tag{margin-top:-4px;font-size:10px;font-weight:700;letter-spacing:.08em;color:#3f5f5c;background:rgba(255,251,242,.94);border:1px solid rgba(190,170,135,.5);border-radius:5px;padding:2px 9px;white-space:nowrap;backdrop-filter:blur(8px);box-shadow:0 4px 10px rgba(90,110,100,.14)}
       .fj-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:#8cb7a4;box-shadow:0 0 6px rgba(140,183,164,.8);vertical-align:1px}
       .fj-dot[data-off="off"]{background:#d99b8f;box-shadow:0 0 6px rgba(217,155,143,.8)}
       /* ---- 古书卡片 ---- */
@@ -118,7 +118,7 @@ window.__ModuleLoader__.load({
       .fj-seg-practice{border-left:2px solid #8cb7af;padding-left:10px;color:#3f5f5c}
       /* ---- 经书选择与名相 ---- */
       .fj-picker{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
-      .fj-chip{border:1px solid #e2d3b6;background:rgba(255,255,255,.6);color:#7a6a4e;font:inherit;font-size:11px;font-weight:700;letter-spacing:.02em;padding:3px 9px;border-radius:999px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+      .fj-chip{border:1px solid #e2d3b6;background:rgba(255,255,255,.6);color:#7a6a4e;font:inherit;font-size:11px;font-weight:700;letter-spacing:.02em;padding:3px 9px;border-radius:6px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
       .fj-chip:hover{background:#fffdf7;border-color:#cbb894;color:#33555a}
       .fj-chip[data-on="on"]{background:#8cb7af;border-color:#8cb7af;color:#fffdf5;box-shadow:0 2px 6px rgba(90,130,120,.25)}
       .fj-chip:focus-visible{outline:2px solid #a9c8bf;outline-offset:2px}
@@ -155,10 +155,25 @@ window.__ModuleLoader__.load({
       .fj-halo[data-state="done"]{background:conic-gradient(from 0deg,rgba(150,178,140,0) 0deg,rgba(150,178,140,.45) 80deg,rgba(150,178,140,0) 190deg,rgba(150,178,140,.32) 300deg,rgba(150,178,140,0) 360deg)}
       @keyframes fj-halo-spin{to{transform:rotate(360deg)}}
       .fj-img{position:relative;z-index:1}
-      /* ---- 功课页 ---- */
-      .fj-tabs{flex:1;min-width:0;display:flex;gap:2px;background:rgba(190,170,135,.18);border-radius:999px;padding:2px}
+      /* ---- 敲木鱼：点她中间，飘一句彩头 ---- */
+      .fj-knocks{position:absolute;left:0;right:0;top:0;z-index:3;pointer-events:none;height:0}
+      .fj-knock{position:absolute;left:50%;top:2px;white-space:nowrap;font-size:11.5px;font-weight:700;letter-spacing:.02em;
+        color:#5c5a54;background:rgba(255,251,242,.94);border:1px solid #e2d3b6;border-radius:6px;
+        padding:2px 9px 3px;box-shadow:0 2px 9px rgba(140,110,60,.16);
+        animation:fj-knock-float 1.05s cubic-bezier(.2,.7,.3,1) forwards}
+      .fj-knock b{margin-left:2px;color:#c08a2e;font-weight:800}
+      @keyframes fj-knock-float{
+        0%{opacity:0;transform:translate(-50%,8px) scale(.86)}
+        18%{opacity:1;transform:translate(-50%,-2px) scale(1.06)}
+        100%{opacity:0;transform:translate(-50%,-52px) scale(1)}}
+      .fj-img[data-knock="on"]{animation:fj-knock-bounce .34s ease-out}
+      @keyframes fj-knock-bounce{
+        0%{transform:translateY(0) scale(1)}
+        30%{transform:translateY(4px) scale(.984)}
+        100%{transform:translateY(0) scale(1)}}
+      .fj-tabs{flex:1;min-width:0;display:flex;gap:2px;background:rgba(190,170,135,.18);border-radius:8px;padding:2px}
       .fj-tab{flex:0 0 auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;letter-spacing:.06em;
-        color:#8a7452;background:transparent;border-radius:999px;padding:2px 9px;transition:background .18s,color .18s}
+        color:#8a7452;background:transparent;border-radius:6px;padding:2px 9px;transition:background .18s,color .18s}
       .fj-tab[data-on="on"]{background:#fffdf6;color:#6a5333;box-shadow:0 1px 3px rgba(120,100,70,.2)}
       .fj-tab[data-run="on"]::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;
         background:#d9a13c;margin-left:4px;vertical-align:1px;animation:fj-pulse 1.5s ease-in-out infinite}
@@ -247,12 +262,18 @@ window.__ModuleLoader__.load({
       return payload;
     };
 
-    const mmss = (delta) => {
-      if (!Number.isFinite(delta)) return '';
-      const total = Math.max(0, Math.round(delta / 1000));
-      const hours = Math.floor(total / 3600);
-      const minutes = Math.floor((total % 3600) / 60);
-      return hours > 0 ? `${hours}h${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
+    // 多久之后再来一句：说人话，别摆 437:01 这种让人读成 400 多小时的数字
+    const untilText = (delta) => {
+      if (!Number.isFinite(delta) || delta <= 0) return '';
+      const total = Math.round(delta / 1000);
+      if (total < 60) return '1 分钟内再读';
+      const minutes = Math.floor(total / 60);
+      if (minutes < 60) return `${minutes} 分钟后再读`;
+      const hours = Math.floor(minutes / 60);
+      const rest = minutes % 60;
+      if (hours < 24) return rest ? `${hours} 小时 ${rest} 分后再读` : `${hours} 小时后再读`;
+      const days = Math.floor(hours / 24);
+      return days === 1 ? '明天再读' : `${days} 天后再读`;
     };
 
     // 功课页的数字口径：token 只报全会话累计（用户要的就是「这个项目一共烧了多少」）。
@@ -283,7 +304,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState(null);
       const [busy, setBusy] = useState(false);
       const [open, setOpen] = useState(false);
-      const [view, setView] = useState('card');
+      const [view, setView] = useState('work');
       const [sutra, setSutra] = useState(null);
       const [studyNo, setStudyNo] = useState(null);
       const [shell, setShell] = useState(null);
@@ -300,6 +321,10 @@ window.__ModuleLoader__.load({
       const [work, setWork] = useState(null);
       const [workError, setWorkError] = useState(false);
       const [workOpen, setWorkOpen] = useState('');
+      const [knocks, setKnocks] = useState([]);
+      const [knocking, setKnocking] = useState(false);
+      const [meritCount, setMeritCount] = useState(0);
+      const audioRef = useRef(null);
       const cardEl = useRef(null);
       const petEl = useRef(null);
       const drag = useRef(null);
@@ -311,6 +336,52 @@ window.__ModuleLoader__.load({
       // 只有跟人发生关系的那一拍才睁眼（点开、收起、读完、被拖动），到期自动落回去。
       const [lookUntil, setLookUntil] = useState(0);
       const look = useCallback((ms) => setLookUntil(Date.now() + ms), []);
+
+      // --- 敲木鱼 -----------------------------------------------------------
+      // 点她中间那块（身体）敲一下：出个声、飘一句彩头、她在原地轻轻一沉。
+      // 彩头由宿主随机（网页和桌面壳看到的是同一份累计），拿不到就本地随便挑一个。
+      const MERIT_LABELS = ['功德', '财富', '桃花运', '好运', '健康'];
+      const knockSound = () => {
+        try {
+          if (!audioRef.current) {
+            audioRef.current = new Audio(API.sound);
+            audioRef.current.preload = 'auto';
+            audioRef.current.volume = 0.7;
+          }
+          const sound = audioRef.current;
+          sound.currentTime = 0;
+          const played = sound.play?.();
+          if (played?.catch) played.catch(() => { /* 静音/自动播放拦截：照样能敲 */ });
+        } catch { /* 没有音频环境也不影响敲 */ }
+      };
+
+      const knock = () => {
+        knockSound();
+        look(500);           // 敲的时候抬眼看你一下
+        setKnocking(true);
+        window.setTimeout(() => setKnocking(false), 460);
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const label = MERIT_LABELS[Math.floor(Math.random() * MERIT_LABELS.length)];
+        const drift = `${Math.round((Math.random() - 0.5) * 34)}px`;
+        setKnocks((list) => [...list.slice(-5), { id, label, drift }]);
+        window.setTimeout(() => {
+          setKnocks((list) => list.filter((item) => item.id !== id));
+        }, 1100);
+        void post(API.muyu, {}).then((payload) => {
+          if (!payload?.ok) return;
+          setKnocks((list) => list.map((item) => (item.id === id ? { ...item, label: payload.label } : item)));
+          setMeritCount(Number(payload.count) || 0);
+        }).catch(() => { /* 宿主没连上也要能敲 */ });
+      };
+
+      // 命中区：只认立绘中间那块椭圆，四周留给「展开卡片」
+      const knockHit = (event) => {
+        const rect = petEl.current?.querySelector('.fj-img')?.getBoundingClientRect?.();
+        if (!rect || !rect.width || !rect.height) return false;
+        const dx = (event.clientX - (rect.left + rect.width / 2)) / (rect.width * 0.30);
+        const dy = (event.clientY - (rect.top + rect.height * 0.58)) / (rect.height * 0.26);
+        return (dx * dx) + (dy * dy) <= 1;
+      };
 
       const history = (data?.cards || []).filter((c) => c && c.cite);
       const current = (pinned.current && history.find((c) => c.id === pinned.current)) || history[0] || null;
@@ -389,6 +460,7 @@ window.__ModuleLoader__.load({
       }, [workCadence]);
 
       const workRunning = Number(work?.runningCount || 0);
+      const muyuTotal = Math.max(meritCount, Number(data?.muyuCount || 0));
       // 开工睁眼、收工睁眼：只在这两拍，跑任务的过程中她一直是闭眼的
       const seenWork = useRef(null);
       useEffect(() => {
@@ -417,6 +489,8 @@ window.__ModuleLoader__.load({
       const sprite = () => {
         const sprites = data?.pet?.sprites;
         if (!sprites || spriteBroken) return '';
+        // 0. 敲木鱼这一拍：她手上得有槌子和木鱼（没有这张素材就照旧）
+        if (knocking && sprites.knock) return sprites.knock;
         const now = Date.now();
         // 1. 抬眼看你：点开/收起/读完/被拖动之后的短暂一拍
         if (now < lookUntil) return sprites.open || sprites.idle;
@@ -455,7 +529,7 @@ window.__ModuleLoader__.load({
 
       const close = () => {
         setOpen(false);
-        setView('card');
+        setView('work');
         pinned.current = null;
         look(600); // 合卷，抬眼看你一下
       };
@@ -763,14 +837,8 @@ window.__ModuleLoader__.load({
           h('div', { className: 'fj-foot' },
             h('button', { className: 'fj-btn', type: 'button', onClick: () => setView('study') }, '回到逐句读'))));
 
-      // --- 卡片顶部的两个 tab -------------------------------------------------
+      // --- 卡片顶部的两个 tab（功课默认在左） ----------------------------------
       const tabs = (active) => h('div', { className: 'fj-tabs', role: 'tablist', 'aria-label': '卡片页' },
-        h('button', {
-          type: 'button', role: 'tab', className: 'fj-tab',
-          'data-on': active === 'card' ? 'on' : 'off',
-          'aria-selected': active === 'card' ? 'true' : 'false',
-          onClick: () => setView('card'),
-        }, '今日读经'),
         h('button', {
           type: 'button', role: 'tab', className: 'fj-tab',
           'data-on': active === 'work' ? 'on' : 'off',
@@ -778,7 +846,13 @@ window.__ModuleLoader__.load({
           'aria-selected': active === 'work' ? 'true' : 'false',
           title: workRunning > 0 ? `${workRunning} 个会话在跑` : '今天干了什么',
           onClick: () => setView('work'),
-        }, '功课'));
+        }, '功课'),
+        h('button', {
+          type: 'button', role: 'tab', className: 'fj-tab',
+          'data-on': active === 'card' ? 'on' : 'off',
+          'aria-selected': active === 'card' ? 'true' : 'false',
+          onClick: () => setView('card'),
+        }, '今日读经'));
 
       // --- 功课页 -----------------------------------------------------------
       const workDetail = (item) => h('div', { className: 'fj-work-open' },
@@ -850,7 +924,7 @@ window.__ModuleLoader__.load({
               : h('p', { className: 'fj-work-empty' },
                 workError ? '读不到功课，宿主那边可能还没重开' : '今日无功课'),
             h('div', { className: 'fj-foot' },
-              h('span', { className: 'fj-src' }, '数字来自 DSH 会话日志'),
+              h('span', { className: 'fj-src' }, muyuTotal > 0 ? `已积功德 ${muyuTotal}` : '数字来自 DSH 会话日志'),
               h('button', { className: 'fj-btn', type: 'button', onClick: close }, '收起'))));
       };
 
@@ -966,9 +1040,10 @@ window.__ModuleLoader__.load({
             onPointerDown: startDrag,
             onPointerMove: onDrag,
             onPointerUp: endDrag,
-            onClick: () => {
+            onClick: (event) => {
               if (suppress.current) { suppress.current = false; return; }
               if (open) { close(); return; }
+              if (knockHit(event)) { knock(); return; }
               pinned.current = history[0]?.id || null;
               look(400); // 先抬眼「哦，是你」，再低头捧经
               setOpen(true);
@@ -983,17 +1058,25 @@ window.__ModuleLoader__.load({
               look(400); // 先抬眼「哦，是你」，再低头捧经
               setOpen(true);
             },
-            'aria-label': `莲鲸，${unread ? `${unread} 条未读经文` : '没有新经文'}，点开或收起`,
+            'aria-label': `莲鲸，${unread ? `${unread} 条未读经文` : '没有新经文'}，点中间敲木鱼，点四周看功课`,
           },
           workRunning > 0 ? h('i', { className: 'fj-halo', 'data-state': 'busy', 'aria-hidden': true }) : null,
           sprite()
             ? h('img', {
               className: 'fj-img',
               'data-talking': open ? 'on' : 'off',
+              'data-knock': knocking ? 'on' : 'off',
               src: sprite(), alt: '莲鲸', draggable: false,
+              title: '点她中间敲木鱼',
               onError: () => setSpriteBroken(true),
             })
             : h('div', { className: 'fj-img', 'aria-hidden': true }),
+          knocks.length > 0
+            ? h('div', { className: 'fj-knocks', 'aria-hidden': true },
+              knocks.map((item) => h('span', {
+                key: item.id, className: 'fj-knock', style: { marginLeft: item.drift },
+              }, item.label, h('b', null, '+1'))))
+            : null,
           unread > 0 ? h('span', { className: 'fj-badge', 'aria-hidden': true }, unread > 9 ? '9+' : String(unread)) : null,
           h('span', { className: 'fj-tag' },
             h('i', { className: 'fj-dot', 'data-off': online ? 'on' : 'off' }),
@@ -1001,7 +1084,7 @@ window.__ModuleLoader__.load({
               ? '翻经中'
               : workRunning > 0
                 ? `${workRunning} 个在跑`
-                : Number.isFinite(countdown) && countdown > 0 ? `${mmss(countdown)} 后再读` : '静坐中')),
+                : Number.isFinite(countdown) && countdown > 0 ? untilText(countdown) : '静坐中')),
           open ? card : null,
           open ? h('span', { className: 'fj-tail', 'aria-hidden': true }) : null));
     }

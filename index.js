@@ -34,6 +34,8 @@ export const ROUTES = {
   catalog: '/api/dsh-fojing-pet.catalog',
   work: '/api/dsh-fojing-pet.work',
   import: '/api/dsh-fojing-pet.import',
+  sound: '/api/dsh-fojing-pet.sound',
+  muyu: '/api/dsh-fojing-pet.muyu',
 };
 
 /** 独立桌面壳用的免鉴权回环路由（只读 + 带自定义头的 POST）。 */
@@ -48,12 +50,25 @@ export const SHELL_ROUTES = {
   import: '/dsh-fojing-pet/import',
   heartbeat: '/dsh-fojing-pet/heartbeat',
   work: '/dsh-fojing-pet/work.json',
+  sound: '/dsh-fojing-pet/muyu.wav',
+  muyu: '/dsh-fojing-pet/muyu',
 };
+
+/** 敲木鱼的时候随机认领一条彩头：都是玩笑，别当真，也别当真事上报。 */
+const MERIT_KINDS = [
+  { key: 'gongde', label: '功德' },
+  { key: 'caifu', label: '财富' },
+  { key: 'taohua', label: '桃花运' },
+  { key: 'haoyun', label: '好运' },
+  { key: 'jiankang', label: '健康' },
+];
 
 const SPRITES = {
   idle: 'pet-idle.png',
   open: 'pet-open.png',
   read: 'pet-read.png',
+  // 敲木鱼那一下：文件没随包就自动回落到 idle，界面不会开天窗
+  knock: 'pet-knock.png',
 };
 
 const PET_NAME = '莲鲸';
@@ -247,6 +262,9 @@ export function apply(ctx, config) {
     lastRunAt: null,
     nextRunAt: null,
     lastError: null,
+    // 敲木鱼攒的彩头：纯粹是玩，重启不丢就行
+    merits: Object.fromEntries(MERIT_KINDS.map((item) => [item.key, 0])),
+    muyuCount: 0,
   };
   let saveChain = Promise.resolve();
   let pendingTimer = null;
@@ -267,6 +285,8 @@ export function apply(ctx, config) {
           lastRunAt: state.lastRunAt,
           nextRunAt: state.nextRunAt,
           lastError: state.lastError,
+          merits: state.merits,
+          muyuCount: state.muyuCount,
         });
         const dir = dirname(statePath);
         await mkdir(dir, { recursive: true });
@@ -301,6 +321,14 @@ export function apply(ctx, config) {
         && typeof saved.lastSegment.sutraId === 'string' && Number.isFinite(Number(saved.lastSegment.no))
         ? { sutraId: saved.lastSegment.sutraId, no: Number(saved.lastSegment.no) }
         : null;
+      if (saved?.merits && typeof saved.merits === 'object') {
+        for (const item of MERIT_KINDS) {
+          const value = Number(saved.merits[item.key]);
+          state.merits[item.key] = Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+        }
+      }
+      state.muyuCount = Number.isFinite(Number(saved?.muyuCount)) && Number(saved.muyuCount) > 0
+        ? Math.floor(Number(saved.muyuCount)) : 0;
       trim();
     } catch { /* 首次运行：空状态 */ }
   };
@@ -551,7 +579,10 @@ export function apply(ctx, config) {
       pet: {
         name: PET_NAME,
         sprites: Object.fromEntries(Object.keys(SPRITES).map((key) => [key, `${ROUTES.asset}?name=${key}`])),
+        sound: ROUTES.sound,
       },
+      merits: { ...state.merits },
+      muyuCount: state.muyuCount,
     };
   };
 
@@ -848,17 +879,18 @@ export function apply(ctx, config) {
     asset: async (request) => {
       let sprite = 'idle';
       try { sprite = new URL(request.url, 'http://127.0.0.1').searchParams.get('name') || 'idle'; } catch { /* 默认 */ }
-      const file = SPRITES[sprite] || SPRITES.idle;
-      const full = join(assetsDir, file);
-      try {
-        const [bytes, info] = await Promise.all([readFile(full), stat(full)]);
-        if (!info.size) throw new FojingPetError('空文件');
-        return new Response(bytes, {
-          headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=3600' },
-        });
-      } catch {
-        return text(`缺少素材：assets/${file}`, 404);
+      // 可选立绘（比如 knock）没随包时安静地退回 idle：宁可少一张，不能让画面空掉
+      const candidates = [...new Set([SPRITES[sprite] || SPRITES.idle, SPRITES.idle])];
+      for (const file of candidates) {
+        try {
+          const [bytes, info] = await Promise.all([readFile(join(assetsDir, file)), stat(join(assetsDir, file))]);
+          if (!info.size) throw new FojingPetError('空文件');
+          return new Response(bytes, {
+            headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=3600' },
+          });
+        } catch { /* 试下一个 */ }
       }
+      return text(`缺少素材：assets/${candidates[candidates.length - 1]}`, 404);
     },
     shell: async (request) => {
       if (request.method !== 'POST') return json(shellStatus());
@@ -868,6 +900,37 @@ export function apply(ctx, config) {
       if (action === 'quit') return json(quitShell());
       if (action === 'heartbeat') return json(shellHeartbeat(body));
       return json({ ok: false, error: 'action 必须是 launch 或 quit' }, 400);
+    },
+    // 木鱼的「梆」：和立绘一样是随包素材，两个壳共用一个文件
+    sound: async () => {
+      const full = join(assetsDir, 'muyu.wav');
+      try {
+        const bytes = await readFile(full);
+        return new Response(bytes, {
+          headers: { 'content-type': 'audio/wav', 'cache-control': 'public, max-age=86400' },
+        });
+      } catch {
+        return text('缺少素材：assets/muyu.wav', 404);
+      }
+    },
+    // 敲一下：彩头在宿主这边随机，网页和桌面壳看到的是同一份累计
+    muyu: async (request) => {
+      const body = await readBody(request);
+      const wanted = String(body?.kind || '');
+      const pool = MERIT_KINDS.filter((item) => item.key === wanted);
+      const pick = (pool.length ? pool : MERIT_KINDS)[Math.floor(Math.random() * (pool.length || MERIT_KINDS.length))];
+      state.merits[pick.key] = (state.merits[pick.key] || 0) + 1;
+      state.muyuCount += 1;
+      void persist();
+      return json({
+        ok: true,
+        kind: pick.key,
+        label: pick.label,
+        amount: 1,
+        total: state.merits[pick.key],
+        count: state.muyuCount,
+        merits: { ...state.merits },
+      });
     },
     catalog: async () => {
       await ready;
@@ -906,6 +969,8 @@ export function apply(ctx, config) {
       { path: ROUTES.shell, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: (request) => handlers.shell(request) },
       { path: ROUTES.catalog, methods: ['GET'], requestBody: 'buffered', fetch: () => handlers.catalog() },
       { path: ROUTES.work, methods: ['GET'], requestBody: 'buffered', fetch: () => handlers.work() },
+      { path: ROUTES.sound, methods: ['GET'], requestBody: 'buffered', fetch: () => handlers.sound() },
+      { path: ROUTES.muyu, methods: ['POST'], requestBody: 'buffered', fetch: (request) => handlers.muyu(request) },
       { path: ROUTES.import, methods: ['POST'], requestBody: 'buffered', fetch: (request) => handlers.import(request) },
     ];
     const disposers = routes.map((route) => scope.connection.fetch.register(route));
@@ -1097,6 +1162,8 @@ export function apply(ctx, config) {
         register(SHELL_ROUTES.import, ['POST'], (request) => handlers.import(request)),
         register(SHELL_ROUTES.heartbeat, ['GET', 'POST'], (request) => handlers.shell(request)),
         register(SHELL_ROUTES.work, ['GET'], () => handlers.work()),
+        register(SHELL_ROUTES.sound, ['GET'], () => handlers.sound()),
+        register(SHELL_ROUTES.muyu, ['POST'], (request) => handlers.muyu(request)),
       ];
       webCtx.effect(() => () => {
         for (const dispose of disposers) {
