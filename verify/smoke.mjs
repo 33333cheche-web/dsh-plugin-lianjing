@@ -62,11 +62,16 @@ for (const file of manifest.sutras) {
   sutras.push(doc);
 }
 const segments = flattenSegments(sutras);
+// 联网取回的草稿只有原文，释义/名相/练习本来就是空的，作者写的几部才要求齐全
+const authored = flattenSegments(sutras.filter((doc) => !doc.draft));
+const drafts = flattenSegments(sutras.filter((doc) => doc.draft));
 check('总句数不少于 60', segments.length >= 60, `实际 ${segments.length} 句`);
 check('每句都有原文', segments.every((s) => typeof s.text === 'string' && s.text.trim().length > 0));
-check('每句都有释义', segments.every((s) => typeof s.gist === 'string' && s.gist.trim().length > 0));
-check('每句都有练习', segments.every((s) => typeof s.practice === 'string' && s.practice.trim().length > 0));
-check('每句至少一个名相', segments.every((s) => Array.isArray(s.terms) && s.terms.length > 0 && s.terms.every((t) => t.word && t.gloss)));
+check('每句都有释义', authored.every((s) => typeof s.gist === 'string' && s.gist.trim().length > 0));
+check('每句都有练习', authored.every((s) => typeof s.practice === 'string' && s.practice.trim().length > 0));
+check('每句至少一个名相', authored.every((s) => Array.isArray(s.terms) && s.terms.length > 0 && s.terms.every((t) => t.word && t.gloss)));
+check('草稿句也有释义占位', drafts.every((s) => s.gist.trim().length > 0));
+check('草稿句不冒充讲解', drafts.every((s) => s.gist.includes('草稿')));
 check('每部经句序从 1 连续', sutras.every((doc) => doc.segments.every((s, i) => Number(s.no) === i + 1)));
 check('原文不含空白换行', segments.every((s) => !/\s/.test(s.text)));
 check('语言是中文', segments.every((s) => /[\u4e00-\u9fa5]/.test(s.text)));
@@ -141,6 +146,58 @@ console.log('multi-sutra');
 const hostSource = await readFile(join(root, 'index.js'), 'utf8');
 check('host 支持按经书出卡', hostSource.includes('pickSegment'));
 check('next 路由透传请求体', hostSource.includes('handlers.next(request)'));
+
+console.log('online import');
+const {
+  IMPORT_CATALOG, isAllowedUrl, stripHtmlLines, sliceBody,
+  splitParagraph, buildDraft, entryFromUrl, cleanTitle,
+} = await import('../online.js');
+
+check('经目非空', IMPORT_CATALOG.length >= 3);
+check('经目都带 url/start/end/unit', IMPORT_CATALOG.every((item) => item.url && item.start && item.end && item.unit));
+check('经目 id 唯一', new Set(IMPORT_CATALOG.map((item) => item.id)).size === IMPORT_CATALOG.length);
+check('经目都指向 fojing.com', IMPORT_CATALOG.every((item) => isAllowedUrl(item.url)));
+
+// 安全边界：这个功能不能变成任意 URL 抓取器
+check('只允许 fojing.com', isAllowedUrl('https://fojing.com/x/') && isAllowedUrl('https://www.fojing.com/x/'));
+check('拒绝其它站点', !isAllowedUrl('https://evil.com/x') && !isAllowedUrl('https://fojing.com.evil.com/x'));
+check('拒绝非 http(s)', !isAllowedUrl('file:///c:/windows/win.ini') && !isAllowedUrl('ftp://fojing.com/x'));
+
+const sampleHtml = '<html><head><title>佛说某某经_佛经大全</title></head><body>'
+  + '<div class="nav">首页 目录</div><p>如是我闻。一时佛在舍卫国。祇树给孤独园。</p>'
+  + '<p>与大比丘僧千二百五十人俱。</p><p>皆大欢喜，作礼而去。</p>'
+  + '<p>© 2026 佛经</p><p>Theme: Really Simple</p><p>Scroll Up</p></body></html>';
+const lines = stripHtmlLines(sampleHtml);
+check('剥标签后有正文', lines.includes('如是我闻。一时佛在舍卫国。祇树给孤独园。'));
+check('剥标签去掉 script/style', !lines.join('').includes('<'));
+check('标题清洗去掉站点名', cleanTitle('佛说某某经_佛经大全', '兜底') === '佛说某某经');
+
+const sliced = sliceBody(lines, '如是我闻', ['皆大欢喜', '作礼而去']);
+check('能切出正文', sliced.ok === true);
+check('切到结尾标记为止', sliced.lines.at(-1).includes('作礼而去'));
+check('起点缺失时明确报错', sliceBody(lines, '不存在的开头', '皆大欢喜').ok === false);
+
+check('长段按句号切开', splitParagraph('一句。两句。三句。', 4).length === 3);
+check('短段不切', splitParagraph('短句。', 170).length === 1);
+
+const draft = buildDraft({ id: 'demo', title: '示例经', unit: '段', url: 'https://fojing.com/demo/', source: '示例' }, sliced.lines);
+check('草稿生成成功', draft.ok === true);
+check('草稿标记 draft', draft.doc.draft === true);
+check('草稿带来源链接', draft.doc.sourceUrl === 'https://fojing.com/demo/');
+check('草稿去掉页面尾巴', !JSON.stringify(draft.doc.segments).includes('Really Simple')
+  && !JSON.stringify(draft.doc.segments).includes('Scroll Up'));
+check('草稿每段都有释义占位', draft.doc.segments.every((seg) => seg.gist.length > 0));
+check('草稿段落不碎（阿弥陀经量级）', draft.doc.segments.length < 40);
+check('草稿能过语料校验', validateSutra(draft.doc).length === 0);
+
+const fromUrl = entryFromUrl('https://fojing.com/%e9%87%91%e5%88%9a%e7%bb%8f/');
+check('自定义链接能解析', Boolean(fromUrl));
+check('自定义链接 id 只用 ASCII', /^web-[a-z0-9]+$/.test(fromUrl.id));
+check('非白名单链接解析不了', entryFromUrl('https://evil.com/x') === null);
+
+check('host 注册了取经路由', hostSource.includes('ROUTES.import') && hostSource.includes('SHELL_ROUTES.import'));
+check('取经只在白名单站点抓', hostSource.includes('isAllowedUrl'));
+check('悬浮壳右键能取经', shellSource.includes('Invoke-Import') && shellSource.includes("'取经（联网）'"));
 
 console.log('');
 if (failures) {

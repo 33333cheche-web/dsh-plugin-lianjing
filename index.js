@@ -14,6 +14,10 @@ import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import {
+  IMPORT_CATALOG, buildDraft, cleanTitle, entryFromUrl, isAllowedUrl,
+  pageTitle, sliceBody, stripHtmlLines,
+} from './online.js';
 
 export const name = 'dsh-fojing-pet';
 export const inject = ['connection', 'timer'];
@@ -27,6 +31,8 @@ export const ROUTES = {
   sutra: '/api/dsh-fojing-pet.sutra',
   segmentRead: '/api/dsh-fojing-pet.segment-read',
   shell: '/api/dsh-fojing-pet.shell',
+  catalog: '/api/dsh-fojing-pet.catalog',
+  import: '/api/dsh-fojing-pet.import',
 };
 
 /** 独立桌面壳用的免鉴权回环路由（只读 + 带自定义头的 POST）。 */
@@ -37,6 +43,8 @@ export const SHELL_ROUTES = {
   read: '/dsh-fojing-pet/read',
   sutra: '/dsh-fojing-pet/sutra.json',
   segmentRead: '/dsh-fojing-pet/segment-read',
+  catalog: '/dsh-fojing-pet/catalog.json',
+  import: '/dsh-fojing-pet/import',
 };
 
 const SPRITES = {
@@ -329,6 +337,91 @@ export function apply(ctx, config) {
     log('warn', `初始化失败：${error?.message ?? error}`);
   });
 
+  // --- 联网取经 -------------------------------------------------------------
+  // 只从 fojing.com 抓正文；抓回来的是**原文草稿**，释义/名相/练习留空待补。
+  let importing = false;
+
+  const catalogState = () => IMPORT_CATALOG.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    fullTitle: entry.fullTitle,
+    translator: entry.translator || '',
+    category: entry.category || '',
+    source: entry.source || '',
+    unit: entry.unit || '句',
+    hint: entry.hint || '',
+    installed: corpus.sutras.some((s) => s.id === entry.id),
+  }));
+
+  const fetchPage = async (url) => {
+    if (!isAllowedUrl(url)) throw new FojingPetError('只支持 fojing.com 的经文页');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(url, {
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; dsh-plugin-fojing-pet)' },
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+      if (!response.ok) throw new FojingPetError(`抓取失败：HTTP ${response.status}`);
+      const html = await response.text();
+      if (html.length > 4000000) throw new FojingPetError('页面太大了，不像是经文页');
+      return html;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const importSutra = async (payload = {}) => {
+    await ready;
+    if (importing) return { ok: false, error: '正在取经，稍等一下' };
+    let entry = null;
+    if (typeof payload.catalogId === 'string' && payload.catalogId) {
+      entry = IMPORT_CATALOG.find((item) => item.id === payload.catalogId) || null;
+      if (!entry) throw new FojingPetError(`没有这个经目：${payload.catalogId}`);
+    } else if (typeof payload.url === 'string' && payload.url.trim()) {
+      entry = entryFromUrl(payload.url.trim());
+      if (!entry) throw new FojingPetError('只支持 fojing.com 的经文页');
+    } else {
+      throw new FojingPetError('需要 catalogId 或 url');
+    }
+    entry = { ...entry };
+    if (corpus.sutras.some((s) => s.id === entry.id)) {
+      throw new FojingPetError(`《${entry.title}》已经在语料里了`);
+    }
+    importing = true;
+    try {
+      const html = await fetchPage(entry.url);
+      if (entry.titleFromPage) {
+        const title = cleanTitle(pageTitle(html), entry.title);
+        if (title) { entry.title = title.slice(0, 24); entry.fullTitle = title; }
+      }
+      const sliced = sliceBody(stripHtmlLines(html), entry.start, entry.end);
+      if (!sliced.ok) throw new FojingPetError(sliced.error);
+      const built = buildDraft(entry, sliced.lines);
+      if (!built.ok) throw new FojingPetError(built.error);
+      await writeFile(join(corpusDir, `${entry.id}.json`), JSON.stringify(built.doc, null, 2) + '\n', 'utf8');
+      const manifest = JSON.parse(await readFile(corpusPath, 'utf8'));
+      const files = Array.isArray(manifest.sutras) ? manifest.sutras : [];
+      if (!files.includes(`${entry.id}.json`)) files.push(`${entry.id}.json`);
+      manifest.sutras = files;
+      await writeFile(corpusPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+      await loadCorpus();
+      const chars = built.doc.segments.reduce((sum, seg) => sum + seg.text.length, 0);
+      log('info', `取经完成：${entry.fullTitle}（${built.doc.segments.length} 段 / ${chars} 字）`);
+      return {
+        ok: true,
+        id: entry.id,
+        title: entry.title,
+        count: built.doc.segments.length,
+        chars,
+        total: corpus.sutras.length,
+      };
+    } finally {
+      importing = false;
+    }
+  };
+
   // --- 出卡 ---------------------------------------------------------------
   /**
    * 挑下一句：指定 sutraId 时取那部经的第一句未读，否则顺着语料顺序走。
@@ -397,6 +490,7 @@ export function apply(ctx, config) {
       intro: sutra.intro || '',
       unit: sutra.unit || '句',
       edition: corpus.edition,
+      draft: Boolean(sutra.draft),
       progress: progressOf(sutra.id),
       segments: sutra.segments.map((seg) => ({
         no: Number(seg.no),
@@ -444,7 +538,9 @@ export function apply(ctx, config) {
           category: s.category || '',
           intro: s.intro || '',
           unit: s.unit || '句',
+          draft: Boolean(s.draft),
           segments: s.segments.length,
+          count: s.segments.length,
         })),
         count: corpus.segments.length,
         error: corpusError,
@@ -545,6 +641,7 @@ export function apply(ctx, config) {
           source: s.source || '',
           intro: s.intro || '',
           unit: s.unit || '句',
+          draft: Boolean(s.draft),
           count: s.segments.length,
           progress: progressOf(s.id),
         })),
@@ -613,6 +710,21 @@ export function apply(ctx, config) {
       if (action === 'quit') return json(quitShell());
       return json({ ok: false, error: 'action 必须是 launch 或 quit' }, 400);
     },
+    catalog: async () => {
+      await ready;
+      return json({ ok: true, importing, items: catalogState() });
+    },
+    import: async (request) => {
+      const body = await readBody(request);
+      try {
+        const result = await importSutra(body);
+        return json(result, result.ok ? 200 : 409);
+      } catch (error) {
+        const message = String(error?.message ?? error).slice(0, 200);
+        log('warn', `取经失败：${message}`);
+        return json({ ok: false, error: message }, 400);
+      }
+    },
   };
 
   ctx.inject?.(['connection'], (scope) => {
@@ -625,6 +737,8 @@ export function apply(ctx, config) {
       { path: ROUTES.segmentRead, methods: ['POST'], requestBody: 'buffered', fetch: (request) => handlers.segmentRead(request) },
       { path: ROUTES.asset, methods: ['GET'], requestBody: 'buffered', fetch: (request) => handlers.asset(request) },
       { path: ROUTES.shell, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: (request) => handlers.shell(request) },
+      { path: ROUTES.catalog, methods: ['GET'], requestBody: 'buffered', fetch: () => handlers.catalog() },
+      { path: ROUTES.import, methods: ['POST'], requestBody: 'buffered', fetch: (request) => handlers.import(request) },
     ];
     const disposers = routes.map((route) => scope.connection.fetch.register(route));
     scope.effect(() => () => {
@@ -779,6 +893,8 @@ export function apply(ctx, config) {
         register(SHELL_ROUTES.next, ['POST'], (request) => handlers.next(request)),
         register(SHELL_ROUTES.read, ['POST'], (request) => handlers.read(request)),
         register(SHELL_ROUTES.segmentRead, ['POST'], (request) => handlers.segmentRead(request)),
+        register(SHELL_ROUTES.catalog, ['GET'], () => handlers.catalog()),
+        register(SHELL_ROUTES.import, ['POST'], (request) => handlers.import(request)),
       ];
       webCtx.effect(() => () => {
         for (const dispose of disposers) {

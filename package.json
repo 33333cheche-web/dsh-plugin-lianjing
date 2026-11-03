@@ -1,7 +1,7 @@
 {
   "name": "dsh-plugin-fojing-pet",
-  "version": "1.1.0",
-  "description": "莲鲸 · 佛经学习桌宠：四部汉传佛经逐句学习（原文+释义+名相+练习），桌面悬浮壳",
+  "version": "1.2.0",
+  "description": "莲鲸 · 佛经学习桌宠：四部汉传佛经逐句学习（原文+释义+名相+练习），支持联网取经，桌面悬浮壳",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -12,7 +12,9 @@
     "sutra",
     "佛经",
     "心经",
-    "莲鲸"
+    "莲鲸",
+    "sutra-import",
+    "取经"
   ],
   "type": "module",
   "main": "./index.js",
@@ -25,6 +27,7 @@
   "files": [
     "index.js",
     "client.js",
+    "online.js",
     "cordis.patch.yml",
     "assets/",
     "corpus/",

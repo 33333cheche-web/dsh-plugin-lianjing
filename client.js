@@ -21,6 +21,8 @@ window.__ModuleLoader__.load({
       sutra: '/api/dsh-fojing-pet.sutra',
       segmentRead: '/api/dsh-fojing-pet.segment-read',
       shell: '/api/dsh-fojing-pet.shell',
+      catalog: '/api/dsh-fojing-pet.catalog',
+      import: '/api/dsh-fojing-pet.import',
     };
     const POLL_MS = 20000;
     const POS_KEY = 'dsh-fojing-pet.pos';
@@ -123,6 +125,20 @@ window.__ModuleLoader__.load({
       .fj-terms dd{margin:0;font-size:11.5px;line-height:1.7;color:#63776f}
       .fj-note .fj-terms dt{color:#4f7368}
       .fj-note .fj-terms dd{color:#5c7168}
+      .fj-chip-add{background:transparent;border-style:dashed;color:#8a7a5c}
+      .fj-chip-add:hover{background:rgba(140,183,175,.14);border-style:solid}
+      .fj-chip-dot{display:inline-block;width:4px;height:4px;margin-left:4px;border-radius:50%;background:#c9a24a;vertical-align:2px}
+      .fj-fetch-list{display:flex;flex-direction:column;gap:8px;margin:2px 0 12px}
+      .fj-fetch-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(200,180,145,.5);border-radius:10px;background:rgba(255,253,247,.8)}
+      .fj-fetch-main{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+      .fj-fetch-main b{font-size:13px;color:#33555a}
+      .fj-fetch-meta{font-size:10px;color:#a8926c;letter-spacing:.04em}
+      .fj-fetch-hint{font-size:10.5px;color:#7b8b83;line-height:1.55}
+      .fj-fetch-row .fj-btn{flex:0 0 auto}
+      .fj-fetch-custom{display:flex;gap:8px;margin-bottom:10px}
+      .fj-input{flex:1;min-width:0;padding:6px 10px;border:1px solid rgba(200,180,145,.65);border-radius:9px;background:#fffdf7;color:#33555a;font:12px/1.5 "Microsoft YaHei",sans-serif}
+      .fj-input:focus{outline:none;border-color:#8cb7af;box-shadow:0 0 0 2px rgba(140,183,175,.18)}
+      .fj-fetch-msg{margin:0 0 10px;padding:8px 10px;border-radius:9px;background:rgba(140,183,175,.13);color:#3f5f5c;font-size:11.5px;line-height:1.6}
       @keyframes fj-in{from{opacity:0;transform:translateY(5px) scale(.985)}to{opacity:1;transform:none}}
       @keyframes fj-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.006)}}
       @keyframes fj-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
@@ -166,7 +182,9 @@ window.__ModuleLoader__.load({
       });
       let payload = null;
       try { payload = await response.json(); } catch { payload = null; }
-      if (!response.ok && !payload?.running) throw new Error(`${url} ${response.status}`);
+      if (!response.ok && !payload?.running) {
+        throw new Error(payload?.error || `${url} ${response.status}`);
+      }
       return payload;
     };
 
@@ -188,6 +206,10 @@ window.__ModuleLoader__.load({
       const [studyNo, setStudyNo] = useState(null);
       const [shell, setShell] = useState(null);
       const [shellBusy, setShellBusy] = useState(false);
+      const [catalog, setCatalog] = useState(null);
+      const [importBusy, setImportBusy] = useState('');
+      const [importMsg, setImportMsg] = useState('');
+      const [customUrl, setCustomUrl] = useState('');
       const [pos, setPos] = useState(readPos);
       const [spriteBroken, setSpriteBroken] = useState(false);
       const drag = useRef(null);
@@ -256,7 +278,7 @@ window.__ModuleLoader__.load({
       const sprite = () => {
         const sprites = data?.pet?.sprites;
         if (!sprites || spriteBroken) return '';
-        if (view === 'study' || (open && current)) return sprites.read || sprites.idle;
+        if (view === 'study' || view === 'fetch' || (open && current)) return sprites.read || sprites.idle;
         if (unread > 0) return sprites.open || sprites.idle;
         return sprites.idle || '';
       };
@@ -371,6 +393,41 @@ window.__ModuleLoader__.load({
         } catch { /* 学一句不因为写状态失败而中断 */ }
       };
 
+      // --- 联网取经 ----------------------------------------------------------
+      const openFetch = async () => {
+        setView('fetch');
+        setImportMsg('');
+        try {
+          const payload = await getJson(API.catalog);
+          setCatalog(payload?.items || []);
+        } catch (failure) {
+          setImportMsg(String(failure?.message || failure));
+        }
+      };
+
+      const runImport = async (payload) => {
+        const key = payload.catalogId || payload.url || 'custom';
+        if (importBusy) return;
+        setImportBusy(key);
+        setImportMsg('正在联网取原文…');
+        try {
+          const result = await post(API.import, payload);
+          if (result?.ok) {
+            setImportMsg(`已取回《${result.title}》· ${result.count} 段 / ${result.chars} 字。原文进来了，释义与名相还空着，先读原文。`);
+            setCustomUrl('');
+            const next = await getJson(API.catalog).catch(() => null);
+            if (next?.items) setCatalog(next.items);
+            await refresh();
+          } else {
+            setImportMsg(result?.error || '取经失败');
+          }
+        } catch (failure) {
+          setImportMsg(String(failure?.message || failure));
+        } finally {
+          setImportBusy('');
+        }
+      };
+
       const toggleShell = async () => {
         if (shellBusy) return;
         setShellBusy(true);
@@ -405,8 +462,17 @@ window.__ModuleLoader__.load({
             'data-on': sutra && sutra.id === item.id ? 'on' : 'off',
             'aria-selected': sutra && sutra.id === item.id ? 'true' : 'false',
             onClick: () => { void switchSutra(item.id); },
-            title: `${item.fullTitle} · ${item.count} 句`,
-          }, item.title)));
+            title: `${item.fullTitle} · ${item.count} ${item.unit || '句'}${item.draft ? '（原文草稿）' : ''}`,
+          }, item.title,
+          item.draft ? h('i', { className: 'fj-chip-dot', 'aria-hidden': true }) : null)),
+          h('button', {
+            key: '__fetch',
+            type: 'button',
+            className: 'fj-chip fj-chip-add',
+            'data-on': 'off',
+            onClick: () => { void openFetch(); },
+            title: '从 fojing.com 再取一部经的原文',
+          }, '＋ 取经'));
       };
 
       const studyView = () => {
@@ -456,6 +522,46 @@ window.__ModuleLoader__.load({
               h('span', { className: 'fj-src' }, sutra.source || sutra.edition || '内置语料'),
               h('button', { className: 'fj-btn', type: 'button', onClick: () => setView('card') }, '回到卡片'))));
       };
+
+      // --- 取经（联网） ------------------------------------------------------
+      const fetchView = () => h(React.Fragment, null,
+        h('div', { className: 'fj-head' },
+          h('span', { className: 'fj-eyebrow' }, '取经 · 联网'),
+          h('button', { className: 'fj-close', type: 'button', onClick: () => setView('study'), 'aria-label': '回到逐句读' }, '×')),
+        h('div', { className: 'fj-body' },
+          h('p', { className: 'fj-intro' },
+            '从 fojing.com 取一部经的原文，存进本地语料。取回来的只有原文——释义、名相、练习是另写的，机器抓不来，会留空待补。'),
+          catalog === null
+            ? h('p', { className: 'fj-empty' }, '正在取经目…')
+            : h('div', { className: 'fj-fetch-list', role: 'list' },
+              catalog.map((item) => h('div', { key: item.id, className: 'fj-fetch-row', role: 'listitem' },
+                h('div', { className: 'fj-fetch-main' },
+                  h('b', null, item.title),
+                  h('span', { className: 'fj-fetch-meta' }, `${item.source || 'fojing.com'} · ${item.unit || '句'}`),
+                  item.hint ? h('span', { className: 'fj-fetch-hint' }, item.hint) : null),
+                h('button', {
+                  type: 'button',
+                  className: 'fj-btn',
+                  disabled: item.installed || Boolean(importBusy),
+                  onClick: () => { void runImport({ catalogId: item.id }); },
+                }, item.installed ? '已收录' : importBusy === item.id ? '取回中…' : '取这部')))),
+          h('div', { className: 'fj-fetch-custom' },
+            h('input', {
+              type: 'url',
+              className: 'fj-input',
+              placeholder: '也可以贴一个 fojing.com 的经文页链接',
+              value: customUrl,
+              onChange: (event) => setCustomUrl(event.target.value),
+            }),
+            h('button', {
+              type: 'button',
+              className: 'fj-btn',
+              disabled: Boolean(importBusy) || !customUrl.trim(),
+              onClick: () => { void runImport({ url: customUrl.trim() }); },
+            }, importBusy ? '取回中…' : '取链接')),
+          importMsg ? h('p', { className: 'fj-fetch-msg' }, importMsg) : null,
+          h('div', { className: 'fj-foot' },
+            h('button', { className: 'fj-btn', type: 'button', onClick: () => setView('study') }, '回到逐句读'))));
 
       // --- 今日卡片 ----------------------------------------------------------
       const cardView = () => (current
@@ -521,8 +627,8 @@ window.__ModuleLoader__.load({
             disabled: running, onClick: () => { void regenerate(); },
           }, running ? '翻页中…' : '现在读一句')));
 
-      const card = h('div', { className: 'fj-card', role: 'dialog', 'aria-label': view === 'study' ? '逐句读' : '今日读经' },
-        view === 'study' ? studyView() : cardView(),
+      const card = h('div', { className: 'fj-card', role: 'dialog', 'aria-label': view === 'study' ? '逐句读' : view === 'fetch' ? '取经' : '今日读经' },
+        view === 'fetch' ? fetchView() : view === 'study' ? studyView() : cardView(),
         error ? h('p', { className: 'fj-warn', style: { margin: '0 20px 12px' } }, '连接中断，重试中…') : null,
         shell?.error ? h('p', { className: 'fj-warn', style: { margin: '0 20px 12px' } }, `桌宠壳：${String(shell.error).slice(0, 90)}`) : null);
 

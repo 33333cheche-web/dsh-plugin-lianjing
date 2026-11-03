@@ -22,6 +22,8 @@ Add-Type -AssemblyName System.Windows.Forms
 $StateUrl = "$Origin/dsh-fojing-pet/pet.json"
 $NextUrl  = "$Origin/dsh-fojing-pet/next"
 $ReadUrl  = "$Origin/dsh-fojing-pet/read"
+$ImportUrl  = "$Origin/dsh-fojing-pet/import"
+$CatalogUrl = "$Origin/dsh-fojing-pet/catalog.json"
 
 $PetHeight  = 210
 $CardHeight = 470
@@ -672,6 +674,39 @@ function Invoke-Next {
   }
 }
 
+# --- 联网取经 ---------------------------------------------------------------
+function Get-Catalog {
+  try {
+    $payload = Invoke-PetApi -Method 'GET' -Url $CatalogUrl
+    return @($payload.items)
+  } catch {
+    return @()
+  }
+}
+
+function Invoke-Import {
+  param([string]$CatalogId = '')
+  if (-not $CatalogId) { return }
+  if ($script:Busy) { return }
+  $script:Busy = $true
+  try {
+    $txtStatus.Text = '联网取经中…'
+    # 抓网页要几秒，先把「取经中」这几个字画出来，不然界面像卡死
+    $window.Dispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::Background)
+    $result = Invoke-PetApi -Method 'POST' -Url $ImportUrl -Body @{ catalogId = $CatalogId }
+    Refresh-State | Out-Null
+    Render-Card
+    Update-PetImage
+    $txtStatus.Text = "取回《$($result.title)》· $($result.count) 段"
+  } catch {
+    $detail = $_.Exception.Message
+    if ($detail.Length -gt 40) { $detail = $detail.Substring(0, 40) }
+    $txtStatus.Text = "取经失败 · $detail"
+  } finally {
+    $script:Busy = $false
+  }
+}
+
 # --- 交互 -------------------------------------------------------------------
 # 用 WPF 原生 DragMove：它自己处理 DPI，不会像手算像素差那样越拖越偏。
 # DragMove 会阻塞到松手，所以用「位置有没有变」来区分拖动和单击。
@@ -763,8 +798,44 @@ $miHide.Add_Click({ if ($script:ShowingCard) { Toggle-Card } })
 $miQuit = New-Object System.Windows.Controls.MenuItem
 $miQuit.Header = '退出桌宠'
 $miQuit.Add_Click({ $window.Close() })
+# 取经：子菜单在展开时才去问一次经目，省得每分钟都打接口
+$miFetch = New-Object System.Windows.Controls.MenuItem
+$miFetch.Header = '取经（联网）'
+$miFetch.Add_SubmenuOpened({
+    try {
+      $miFetch.Items.Clear()
+      $items = @(Get-Catalog)
+      if (-not $items.Count) {
+        $none = New-Object System.Windows.Controls.MenuItem
+        $none.Header = '取不到经目'
+        $none.IsEnabled = $false
+        $miFetch.Items.Add($none) | Out-Null
+        return
+      }
+      foreach ($item in $items) {
+        $mi = New-Object System.Windows.Controls.MenuItem
+        if ($item.installed) {
+          $mi.Header = "$($item.title)（已收录）"
+          $mi.IsEnabled = $false
+        } else {
+          $mi.Header = "$($item.title) · 联网取回"
+          $mi.Tag = $item.id
+          $mi.Add_Click({
+              try {
+                $id = $this.Tag
+                if ($id) { Invoke-Import $id }
+              } catch {
+                $txtStatus.Text = '取经失败'
+              }
+            })
+        }
+        $miFetch.Items.Add($mi) | Out-Null
+      }
+    } catch { }
+  })
 $menu.Items.Add($miReset) | Out-Null
 $menu.Items.Add($miHide) | Out-Null
+$menu.Items.Add($miFetch) | Out-Null
 $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 $menu.Items.Add($miQuit) | Out-Null
 $petImage.ContextMenu = $menu
