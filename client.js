@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
       shell: '/api/dsh-fojing-pet.shell',
       catalog: '/api/dsh-fojing-pet.catalog',
       import: '/api/dsh-fojing-pet.import',
+      work: '/api/dsh-fojing-pet.work',
     };
     const POLL_MS = 20000;
     const POS_KEY = 'dsh-fojing-pet.pos';
@@ -52,6 +53,7 @@ window.__ModuleLoader__.load({
         box-shadow:0 22px 48px rgba(90,80,55,.22),0 2px 0 rgba(255,255,255,.9) inset;
         padding:0 0 2px;animation:fj-in .18s ease-out}
       .fj-pet[data-drop="down"] .fj-card{bottom:auto;top:calc(100% + 9px)}
+      .fj-card[data-view="work"]{max-height:min(76vh,660px)}
       .fj-card::-webkit-scrollbar{width:8px}
       .fj-card::-webkit-scrollbar-track{background:#f3e8d2;border-radius:8px}
       .fj-card::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#dcca9f,#c2ab7d);border-radius:8px}
@@ -142,6 +144,56 @@ window.__ModuleLoader__.load({
       .fj-input{flex:1;min-width:0;padding:6px 10px;border:1px solid rgba(200,180,145,.65);border-radius:9px;background:#fffdf7;color:#33555a;font:12px/1.5 "Microsoft YaHei",sans-serif}
       .fj-input:focus{outline:none;border-color:#8cb7af;box-shadow:0 0 0 2px rgba(140,183,175,.18)}
       .fj-fetch-msg{margin:0 0 10px;padding:8px 10px;border-radius:9px;background:rgba(140,183,175,.13);color:#3f5f5c;font-size:11.5px;line-height:1.6}
+      /* ---- 佛光：有活在跑时立绘背后那一圈缓慢转动的光 ---- */
+      .fj-halo{position:absolute;left:50%;top:104px;z-index:0;width:206px;height:206px;margin:-103px 0 0 -103px;
+        border-radius:50%;pointer-events:none;
+        background:conic-gradient(from 0deg,rgba(217,161,60,0) 0deg,rgba(226,176,84,.55) 55deg,rgba(255,238,190,.18) 110deg,rgba(217,161,60,0) 185deg,rgba(226,176,84,.42) 292deg,rgba(217,161,60,0) 360deg);
+        -webkit-mask:radial-gradient(circle,transparent 55%,#000 60%,#000 79%,transparent 83%);
+        mask:radial-gradient(circle,transparent 55%,#000 60%,#000 79%,transparent 83%);
+        animation:fj-halo-spin 9s linear infinite;opacity:.92}
+      .fj-halo[data-state="busy"]{animation-duration:5.5s;opacity:1}
+      .fj-halo[data-state="done"]{background:conic-gradient(from 0deg,rgba(150,178,140,0) 0deg,rgba(150,178,140,.45) 80deg,rgba(150,178,140,0) 190deg,rgba(150,178,140,.32) 300deg,rgba(150,178,140,0) 360deg)}
+      @keyframes fj-halo-spin{to{transform:rotate(360deg)}}
+      .fj-img{position:relative;z-index:1}
+      /* ---- 功课页 ---- */
+      .fj-tabs{flex:1;min-width:0;display:flex;gap:2px;background:rgba(190,170,135,.18);border-radius:999px;padding:2px}
+      .fj-tab{flex:0 0 auto;border:0;cursor:pointer;font:inherit;font-size:10px;font-weight:800;letter-spacing:.06em;
+        color:#8a7452;background:transparent;border-radius:999px;padding:2px 9px;transition:background .18s,color .18s}
+      .fj-tab[data-on="on"]{background:#fffdf6;color:#6a5333;box-shadow:0 1px 3px rgba(120,100,70,.2)}
+      .fj-tab[data-run="on"]::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;
+        background:#d9a13c;margin-left:4px;vertical-align:1px;animation:fj-pulse 1.5s ease-in-out infinite}
+      .fj-tab:disabled{cursor:default;opacity:.65}
+      @keyframes fj-pulse{0%,100%{opacity:.3}50%{opacity:1}}
+      .fj-work-sum{display:flex;align-items:baseline;gap:8px;margin:0 0 7px;font-size:10px;color:#9b866a}
+      .fj-work-sum b{color:#6a5333;font-size:11px}
+      .fj-work-list{display:flex;flex-direction:column;gap:5px}
+      .fj-work-row{display:block;width:100%;text-align:left;border:1px solid rgba(190,170,135,.42);border-radius:10px;
+        background:rgba(255,253,246,.6);padding:7px 9px;cursor:pointer;font:inherit;color:inherit;transition:background .18s,border-color .18s}
+      .fj-work-row:hover{background:#fffdf6;border-color:rgba(170,140,95,.6)}
+      .fj-work-row[data-open="on"]{background:#fffdf6;border-color:rgba(170,140,95,.75)}
+      .fj-work-row[data-run="on"]{border-color:rgba(217,161,60,.6);box-shadow:0 0 0 1px rgba(217,161,60,.16)}
+      .fj-work-top{display:flex;align-items:center;gap:6px}
+      .fj-work-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#c9bda6}
+      .fj-work-dot[data-run="on"]{background:#d9a13c;animation:fj-pulse 1.5s ease-in-out infinite}
+      .fj-work-name{flex:0 0 auto;max-width:96px;font-size:11px;font-weight:800;color:#6a5333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .fj-work-title{flex:1;min-width:0;font-size:10px;color:#8a7452;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .fj-work-meta{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:10px;color:#9b866a}
+      .fj-work-bar{flex:0 1 58px;min-width:22px;height:3px;border-radius:2px;background:rgba(190,170,135,.3);overflow:hidden}
+      .fj-work-bar i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,#b7c3a4,#7f9a7a)}
+      .fj-work-num{font-variant-numeric:tabular-nums;white-space:nowrap}
+      .fj-work-open{margin-top:7px;padding-top:7px;border-top:1px dashed rgba(190,170,135,.55)}
+      .fj-work-sec{font-size:9.5px;font-weight:800;letter-spacing:.16em;color:#a8926d;margin:0 0 4px}
+      .fj-todo{display:flex;gap:5px;align-items:flex-start;font-size:10.5px;line-height:1.5;color:#6f6250;padding:1px 0}
+      .fj-todo em{flex:0 0 auto;font-style:normal;width:11px;color:#a8926d}
+      .fj-todo[data-s="completed"]{color:#a5977f;text-decoration:line-through}
+      .fj-todo[data-s="in_progress"]{color:#41634a;font-weight:700}
+      .fj-todo[data-s="in_progress"] em{color:#7f9a7a}
+      .fj-work-nums{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:7px;font-size:10px;color:#8a7452}
+      .fj-work-nums b{color:#5f4c30;font-weight:800;font-variant-numeric:tabular-nums}
+      .fj-work-kids{margin-top:7px;display:flex;flex-direction:column;gap:2px;font-size:10px;color:#8a7452}
+      .fj-work-kid{display:flex;align-items:center;gap:5px}
+      .fj-work-kid span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .fj-work-empty{margin:2px 0 4px;padding:12px 0;text-align:center;font-size:11px;color:#a08d70}
       /* 只动 opacity：transform 被 .fj-card 拿去定位了，动画里再写会把居中覆盖掉 */
       @keyframes fj-in{from{opacity:0}to{opacity:1}}
       @keyframes fj-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.006)}}
@@ -203,6 +255,29 @@ window.__ModuleLoader__.load({
       return hours > 0 ? `${hours}h${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
     };
 
+    // 功课页的数字口径：token 只报全会话累计（用户要的就是「这个项目一共烧了多少」）。
+    const fmtTokens = (value) => {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n) || n <= 0) return '0';
+      if (n >= 1e8) return `${(n / 1e8).toFixed(2)} 亿`;
+      if (n >= 1e4) return `${(n / 1e4).toFixed(1)} 万`;
+      return String(Math.round(n));
+    };
+    const fmtWork = (ms) => {
+      const total = Math.max(0, Math.round(Number(ms || 0) / 1000));
+      if (total < 60) return `${total} 秒`;
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      return hours > 0 ? `${hours} 小时 ${minutes} 分` : `${minutes} 分`;
+    };
+    const fmtAgo = (ms) => {
+      const total = Math.max(0, Math.round(Number(ms || 0) / 1000));
+      if (total < 60) return '刚刚';
+      if (total < 3600) return `${Math.floor(total / 60)} 分钟前`;
+      if (total < 86400) return `${Math.floor(total / 3600)} 小时前`;
+      return `${Math.floor(total / 86400)} 天前`;
+    };
+
     function Pet() {
       const [data, setData] = useState(null);
       const [error, setError] = useState(null);
@@ -222,6 +297,9 @@ window.__ModuleLoader__.load({
       const [cardMax, setCardMax] = useState(0);
       const [drop, setDrop] = useState('up');
       const [shift, setShift] = useState(0);
+      const [work, setWork] = useState(null);
+      const [workError, setWorkError] = useState(false);
+      const [workOpen, setWorkOpen] = useState('');
       const cardEl = useRef(null);
       const petEl = useRef(null);
       const drag = useRef(null);
@@ -287,6 +365,40 @@ window.__ModuleLoader__.load({
         return () => window.clearInterval(handle);
       }, [open]);
 
+      // --- 功课数据 ---------------------------------------------------------
+      // 看功课页时勤一点；其余时间只为佛光和角标，慢一点就够（宿主那边还有 2.5s 快照缓存）。
+      const workCadence = open && view === 'work' ? 5000 : 12000;
+      useEffect(() => {
+        let cancelled = false;
+        let handle = null;
+        const loop = async () => {
+          if (cancelled) return;
+          if (!document.hidden) {
+            try {
+              const payload = await getJson(API.work);
+              if (payload?.ok) { setWork(payload); setWorkError(false); } else setWorkError(true);
+            } catch { setWorkError(true); }
+          }
+          handle = window.setTimeout(loop, workCadence);
+        };
+        void loop();
+        return () => {
+          cancelled = true;
+          if (handle) window.clearTimeout(handle);
+        };
+      }, [workCadence]);
+
+      const workRunning = Number(work?.runningCount || 0);
+      // 开工睁眼、收工睁眼：只在这两拍，跑任务的过程中她一直是闭眼的
+      const seenWork = useRef(null);
+      useEffect(() => {
+        const before = seenWork.current;
+        seenWork.current = workRunning;
+        if (before === null) return;
+        if (before === 0 && workRunning > 0) look(900);
+        else if (before > 0 && workRunning === 0) look(1500);
+      }, [workRunning, look]);
+
       // 打开卡片即已读
       useEffect(() => {
         if (!open || view !== 'card' || !current || current.read || marked.current.has(current.id)) return;
@@ -310,6 +422,8 @@ window.__ModuleLoader__.load({
         if (now < lookUntil) return sprites.open || sprites.idle;
         // 2. 卡片开着就是在读，垂目
         if (view === 'study' || view === 'fetch' || (open && current)) return sprites.read || sprites.idle;
+        // 2.5 看功课的时候她只是陪着，闭眼入定，不盯着屏幕
+        if (view === 'work' && open) return sprites.idle || '';
         // 3. 有未读：不常亮睁眼（那是干瞪眼），每 20 秒抬眼看你一下就走
         if (unread > 0 && (now % 20000) < 2600) return sprites.open || sprites.idle;
         // 4. 其余时间闭眼入定
@@ -649,11 +763,102 @@ window.__ModuleLoader__.load({
           h('div', { className: 'fj-foot' },
             h('button', { className: 'fj-btn', type: 'button', onClick: () => setView('study') }, '回到逐句读'))));
 
+      // --- 卡片顶部的两个 tab -------------------------------------------------
+      const tabs = (active) => h('div', { className: 'fj-tabs', role: 'tablist', 'aria-label': '卡片页' },
+        h('button', {
+          type: 'button', role: 'tab', className: 'fj-tab',
+          'data-on': active === 'card' ? 'on' : 'off',
+          'aria-selected': active === 'card' ? 'true' : 'false',
+          onClick: () => setView('card'),
+        }, '今日读经'),
+        h('button', {
+          type: 'button', role: 'tab', className: 'fj-tab',
+          'data-on': active === 'work' ? 'on' : 'off',
+          'data-run': workRunning > 0 ? 'on' : 'off',
+          'aria-selected': active === 'work' ? 'true' : 'false',
+          title: workRunning > 0 ? `${workRunning} 个会话在跑` : '今天干了什么',
+          onClick: () => setView('work'),
+        }, '功课'));
+
+      // --- 功课页 -----------------------------------------------------------
+      const workDetail = (item) => h('div', { className: 'fj-work-open' },
+        item.todos.items.length > 0
+          ? h('div', null,
+            h('p', { className: 'fj-work-sec' }, '子任务'),
+            item.todos.items.map((todo, index) => h('div', {
+              key: `todo-${index}`,
+              className: 'fj-todo',
+              'data-s': todo.status,
+            },
+            h('em', null, todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '◔' : '○'),
+            h('span', null, todo.content))))
+          : h('p', { className: 'fj-work-sec', style: { margin: 0 } }, '这个会话没有登记子任务'),
+        h('div', { className: 'fj-work-nums' },
+          h('span', null, 'token ', h('b', null, fmtTokens(item.tokens.total))),
+          h('span', null, '轮次 ', h('b', null, String(item.stats.turns))),
+          h('span', null, 'LLM ', h('b', null, fmtWork(item.stats.llmMs))),
+          h('span', null, '工具 ', h('b', null, fmtWork(item.stats.toolMs)))),
+        item.children.length > 0
+          ? h('div', { className: 'fj-work-kids' },
+            h('p', { className: 'fj-work-sec', style: { margin: '7px 0 3px' } }, `子 agent · ${item.childCount}`),
+            item.children.map((kid) => h('div', { key: kid.id, className: 'fj-work-kid' },
+              h('i', { className: 'fj-work-dot', 'data-run': kid.running ? 'on' : 'off' }),
+              h('span', null, kid.title || kid.short),
+              h('b', { className: 'fj-work-num' }, fmtTokens(kid.tokens.total)))))
+          : null);
+
+      const workRow = (item) => {
+        const expanded = workOpen === item.id;
+        const ratio = item.todos.total > 0 ? Math.round((item.todos.done / item.todos.total) * 100) : 0;
+        return h('div', { key: item.id },
+          h('button', {
+            type: 'button',
+            className: 'fj-work-row',
+            'data-run': item.running ? 'on' : 'off',
+            'data-open': expanded ? 'on' : 'off',
+            'aria-expanded': expanded ? 'true' : 'false',
+            onClick: () => setWorkOpen(expanded ? '' : item.id),
+          },
+          h('div', { className: 'fj-work-top' },
+            h('i', { className: 'fj-work-dot', 'data-run': item.running ? 'on' : 'off' }),
+            h('span', { className: 'fj-work-name' }, item.project || item.short),
+            h('span', { className: 'fj-work-title' }, item.title || '（没有标题）')),
+          h('div', { className: 'fj-work-meta' },
+            item.todos.total > 0 ? h('span', { className: 'fj-work-num' }, `${item.todos.done}/${item.todos.total}`) : null,
+            item.todos.total > 0 ? h('span', { className: 'fj-work-bar' }, h('i', { style: { width: `${ratio}%` } })) : null,
+            h('span', { className: 'fj-work-num', style: { marginLeft: 'auto' } }, `${fmtTokens(item.tokens.total)} tok`),
+            h('span', { className: 'fj-work-num' },
+              item.running ? fmtWork(item.durationMs) : fmtAgo(item.idleMs)))),
+          expanded ? workDetail(item) : null);
+      };
+
+      const workView = () => {
+        const sessions = work?.sessions || [];
+        return h('div', null,
+          h('div', { className: 'fj-head' },
+            tabs('work'),
+            h('button', { className: 'fj-close', type: 'button', onClick: close, 'aria-label': '收起卡片' }, '×')),
+          h('div', { className: 'fj-body' },
+            h('div', { className: 'fj-work-sum' },
+              h('b', null, workError
+                ? '读不到'
+                : `${workRunning} 个在跑`),
+              h('span', null, work?.totalSessions ? `共 ${Number(work.totalSessions)} 个会话` : ''),
+              h('span', { style: { marginLeft: 'auto' } }, workError ? '宿主没连上' : '刚刚')),
+            sessions.length > 0
+              ? h('div', { className: 'fj-work-list' }, sessions.map(workRow))
+              : h('p', { className: 'fj-work-empty' },
+                workError ? '读不到功课，宿主那边可能还没重开' : '今日无功课'),
+            h('div', { className: 'fj-foot' },
+              h('span', { className: 'fj-src' }, '数字来自 DSH 会话日志'),
+              h('button', { className: 'fj-btn', type: 'button', onClick: close }, '收起'))));
+      };
+
       // --- 今日卡片 ----------------------------------------------------------
       const cardView = () => (current
         ? h('div', null,
           h('div', { className: 'fj-head' },
-            h('span', { className: 'fj-eyebrow' }, '莲鲸手记 · 今日读经'),
+            tabs('card'),
             h('button', { className: 'fj-nav', type: 'button', disabled: !older, onClick: () => navigate(1), 'aria-label': '更早一条' }, '‹'),
             h('button', { className: 'fj-nav', type: 'button', disabled: !newer, onClick: () => navigate(-1), 'aria-label': '更新一条' }, '›'),
             h('button', { className: 'fj-close', type: 'button', onClick: close, 'aria-label': '收起卡片' }, '×')),
@@ -717,7 +922,8 @@ window.__ModuleLoader__.load({
         className: 'fj-card',
         ref: cardEl,
         role: 'dialog',
-        'aria-label': view === 'study' ? '逐句读' : view === 'fetch' ? '取经' : '今日读经',
+        'data-view': view,
+        'aria-label': view === 'study' ? '逐句读' : view === 'fetch' ? '取经' : view === 'work' ? '功课' : '今日读经',
         // 卡片在立绘的 div 里：不拦一下，点卡片里任何地方都会冒泡到立绘上，被当成「收起」
         onClick: (event) => event.stopPropagation(),
         onPointerDown: (event) => event.stopPropagation(),
@@ -727,7 +933,7 @@ window.__ModuleLoader__.load({
           maxHeight: cardMax ? `${cardMax}px` : undefined,
         },
       },
-        view === 'fetch' ? fetchView() : view === 'study' ? studyView() : cardView(),
+        view === 'fetch' ? fetchView() : view === 'study' ? studyView() : view === 'work' ? workView() : cardView(),
         error ? h('p', { className: 'fj-warn', style: { margin: '0 20px 12px' } }, '连接中断，重试中…') : null,
         shell?.error ? h('p', { className: 'fj-warn', style: { margin: '0 20px 12px' } }, `桌宠壳：${String(shell.error).slice(0, 90)}`) : null);
 
@@ -779,6 +985,7 @@ window.__ModuleLoader__.load({
             },
             'aria-label': `莲鲸，${unread ? `${unread} 条未读经文` : '没有新经文'}，点开或收起`,
           },
+          workRunning > 0 ? h('i', { className: 'fj-halo', 'data-state': 'busy', 'aria-hidden': true }) : null,
           sprite()
             ? h('img', {
               className: 'fj-img',
@@ -790,7 +997,11 @@ window.__ModuleLoader__.load({
           unread > 0 ? h('span', { className: 'fj-badge', 'aria-hidden': true }, unread > 9 ? '9+' : String(unread)) : null,
           h('span', { className: 'fj-tag' },
             h('i', { className: 'fj-dot', 'data-off': online ? 'on' : 'off' }),
-            running ? '翻经中' : Number.isFinite(countdown) && countdown > 0 ? `${mmss(countdown)} 后再读` : '静坐中')),
+            running
+              ? '翻经中'
+              : workRunning > 0
+                ? `${workRunning} 个在跑`
+                : Number.isFinite(countdown) && countdown > 0 ? `${mmss(countdown)} 后再读` : '静坐中')),
           open ? card : null,
           open ? h('span', { className: 'fj-tail', 'aria-hidden': true }) : null));
     }

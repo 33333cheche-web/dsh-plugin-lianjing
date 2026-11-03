@@ -32,6 +32,7 @@ export const ROUTES = {
   segmentRead: '/api/dsh-fojing-pet.segment-read',
   shell: '/api/dsh-fojing-pet.shell',
   catalog: '/api/dsh-fojing-pet.catalog',
+  work: '/api/dsh-fojing-pet.work',
   import: '/api/dsh-fojing-pet.import',
 };
 
@@ -46,6 +47,7 @@ export const SHELL_ROUTES = {
   catalog: '/dsh-fojing-pet/catalog.json',
   import: '/dsh-fojing-pet/import',
   heartbeat: '/dsh-fojing-pet/heartbeat',
+  work: '/dsh-fojing-pet/work.json',
 };
 
 const SPRITES = {
@@ -626,6 +628,161 @@ export function apply(ctx, config) {
     } catch { return {}; }
   };
 
+  // --- 功课：读 DSH 自己的工作状态 -------------------------------------------
+  // 会话列表 / todos / token / 时长都在宿主这边折叠好，Web 和桌面壳读同一份 JSON：
+  // 两边不用各写一套，也不去解析会话日志（那是几百 MB 的 zstd）。
+  let sessionQuery = null;
+  let agentRegistry = null;
+  ctx.inject?.(['sessionQuery'], (scope) => { sessionQuery = scope.sessionQuery; });
+  ctx.inject?.(['agents'], (scope) => { agentRegistry = scope.agents; });
+
+  const WORK = {
+    roots: 6,        // 面板最多列几个「项目」
+    children: 3,     // 每个项目最多带几个子 agent
+    todos: 12,       // 每个项目最多带几条子任务
+    ttl: 2500,       // 整份快照的缓存时长（客户端约 5s 拉一次）
+    obsIdle: 20000,  // 空闲会话的投影缓存时长
+    obsBusy: 3000,   // 在跑会话的投影缓存时长
+  };
+
+  const obsCache = new Map();
+
+  const observeValues = async (id, ttl) => {
+    const now = Date.now();
+    const hit = obsCache.get(id);
+    if (hit !== undefined && now - hit.at < ttl) return hit.values;
+    let values = {};
+    try {
+      const observation = await sessionQuery.observeSession(id);
+      values = observation?.projections?.values || {};
+    } catch { values = {}; }   // 冷会话读失败就当没有，不往面板里塞报错
+    obsCache.set(id, { at: now, values });
+    if (obsCache.size > 240) {
+      for (const key of obsCache.keys()) {
+        if (obsCache.size <= 200) break;
+        obsCache.delete(key);
+      }
+    }
+    return values;
+  };
+
+  const isRunning = (id) => {
+    try { return agentRegistry?.get?.(id)?.status === 'running'; } catch { return false; }
+  };
+
+  const tokenTotal = (usage) => (usage
+    ? (usage.uncachedInputTokens || 0) + (usage.outputTokens || 0)
+      + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
+    : 0);
+
+  const projectNameOf = (cwd) => {
+    const text = String(cwd || '').replace(/[\\/]+$/, '');
+    const cut = Math.max(text.lastIndexOf('\\'), text.lastIndexOf('/'));
+    return cut >= 0 ? text.slice(cut + 1) : text;
+  };
+
+  const workItem = async (record, now) => {
+    const header = record?.header || {};
+    const id = String(header.id || '');
+    const running = isRunning(id);
+    const values = await observeValues(id, running ? WORK.obsBusy : WORK.obsIdle);
+    const todos = Array.isArray(values.todos) ? values.todos : [];
+    const usage = values.tokenUsage || null;
+    const stats = values.sessionStats || null;
+    const createdAt = Number(header.createdAt || 0);
+    const lastPromptAt = Number(values.sessionListMetadata?.lastPromptAt || 0);
+    return {
+      id,
+      short: id.replace(/^session-/, '').slice(0, 8),
+      title: typeof values.title === 'string' && values.title ? values.title : projectNameOf(header.cwd),
+      project: projectNameOf(header.cwd),
+      cwd: header.cwd || '',
+      origin: header.origin === 'subagent' ? 'subagent' : 'root',
+      parentId: header.parentSession || '',
+      preset: header.agentPreset || '',
+      running,
+      live: record?.live === true,
+      createdAt,
+      lastPromptAt,
+      durationMs: createdAt > 0 ? now - createdAt : 0,
+      idleMs: lastPromptAt > 0 ? now - lastPromptAt : 0,
+      todos: {
+        total: todos.length,
+        done: todos.filter((item) => item.status === 'completed').length,
+        active: todos.filter((item) => item.status === 'in_progress').length,
+        items: todos.slice(0, WORK.todos).map((item) => ({
+          content: String(item?.content || '').slice(0, 120),
+          status: item?.status === 'completed' || item?.status === 'in_progress' ? item.status : 'pending',
+        })),
+      },
+      tokens: {
+        input: usage?.uncachedInputTokens || 0,
+        output: usage?.outputTokens || 0,
+        cacheRead: usage?.cacheReadTokens || 0,
+        cacheWrite: usage?.cacheWriteTokens || 0,
+        total: tokenTotal(usage),
+      },
+      stats: {
+        turns: stats?.turns || 0,
+        steps: stats?.steps || 0,
+        llmMs: stats?.llmMs || 0,
+        toolMs: stats?.toolMs || 0,
+      },
+    };
+  };
+
+  // 会话列表按活动时间倒序（宿主已经排好）：根会话取前几个，子 agent 挂在父会话下。
+  const workPayload = async () => {
+    if (!sessionQuery) return { ok: false, error: '这个组合里没有 sessionQuery，读不到会话' };
+    const now = Date.now();
+    const records = await sessionQuery.listSessions();
+    const roots = [];
+    const kids = new Map();
+    for (const record of records) {
+      const parent = record?.header?.parentSession;
+      if (parent) {
+        const bucket = kids.get(parent);
+        if (bucket === undefined) kids.set(parent, [record]);
+        else bucket.push(record);
+      } else if (record?.header?.id) {
+        roots.push(record);
+      }
+    }
+    const sessions = [];
+    for (const root of roots.slice(0, WORK.roots)) {
+      const item = await workItem(root, now);
+      const bucket = kids.get(item.id) || [];
+      const children = [];
+      for (const child of bucket.slice(0, WORK.children)) children.push(await workItem(child, now));
+      item.children = children;
+      item.childCount = bucket.length;
+      sessions.push(item);
+    }
+    sessions.sort((left, right) => (Number(right.running) - Number(left.running))
+      || (right.lastPromptAt - left.lastPromptAt));
+    const running = sessions.filter((item) => item.running
+      || item.children.some((child) => child.running));
+    const doneToday = sessions.filter((item) => item.todos.total > 0
+      && item.todos.done === item.todos.total).length;
+    return {
+      ok: true,
+      now,
+      totalSessions: records.length,
+      runningCount: running.length,
+      doneCount: doneToday,
+      sessions,
+    };
+  };
+
+  let workCache = { at: 0, value: null };
+  const workSnapshot = async () => {
+    const now = Date.now();
+    if (workCache.value !== null && now - workCache.at < WORK.ttl) return workCache.value;
+    const value = await workPayload();
+    workCache = { at: Date.now(), value };
+    return value;
+  };
+
   const handlers = {
     state: async () => { await ready; return json(snapshot()); },
     corpus: async () => {
@@ -716,6 +873,14 @@ export function apply(ctx, config) {
       await ready;
       return json({ ok: true, importing, items: catalogState() });
     },
+    work: async () => {
+      await ready;
+      try {
+        return json(await workSnapshot());
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message || error).slice(0, 160) });
+      }
+    },
     import: async (request) => {
       const body = await readBody(request);
       try {
@@ -740,6 +905,7 @@ export function apply(ctx, config) {
       { path: ROUTES.asset, methods: ['GET'], requestBody: 'buffered', fetch: (request) => handlers.asset(request) },
       { path: ROUTES.shell, methods: ['GET', 'POST'], requestBody: 'buffered', fetch: (request) => handlers.shell(request) },
       { path: ROUTES.catalog, methods: ['GET'], requestBody: 'buffered', fetch: () => handlers.catalog() },
+      { path: ROUTES.work, methods: ['GET'], requestBody: 'buffered', fetch: () => handlers.work() },
       { path: ROUTES.import, methods: ['POST'], requestBody: 'buffered', fetch: (request) => handlers.import(request) },
     ];
     const disposers = routes.map((route) => scope.connection.fetch.register(route));
@@ -930,6 +1096,7 @@ export function apply(ctx, config) {
         register(SHELL_ROUTES.catalog, ['GET'], () => handlers.catalog()),
         register(SHELL_ROUTES.import, ['POST'], (request) => handlers.import(request)),
         register(SHELL_ROUTES.heartbeat, ['GET', 'POST'], (request) => handlers.shell(request)),
+        register(SHELL_ROUTES.work, ['GET'], () => handlers.work()),
       ];
       webCtx.effect(() => () => {
         for (const dispose of disposers) {

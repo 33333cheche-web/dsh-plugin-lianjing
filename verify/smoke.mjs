@@ -232,6 +232,29 @@ check('收起会抬眼', /const close = \(\) => \{[\s\S]{0,200}look\(600\)/.test
 check('未读不常亮，间歇抬眼', clientJs.includes('now % 20000') && shellSource.includes('Second % 20'));
 check('壳也有眼神节拍', shellSource.includes('Update-PetImage') && shellSource.includes('$lookTimer'));
 
+console.log('功课 / 工作状态');
+// 数字全部来自 DSH 自己的会话数据：一条免鉴权路由给两个壳共用，不去解析会话日志
+check('宿主有功课路由', hostSource.includes("work: '/dsh-fojing-pet/work.json'"));
+check('网页也能读功课', hostSource.includes("work: '/api/dsh-fojing-pet.work'"));
+check('靠 sessionQuery 读会话', hostSource.includes("ctx.inject?.(['sessionQuery']") && hostSource.includes('listSessions()'));
+check('在跑状态取自 agent 注册表', hostSource.includes("ctx.inject?.(['agents']") && hostSource.includes("status === 'running'"));
+check('子 agent 挂在父会话下', hostSource.includes('header.parentSession') && hostSource.includes('childCount'));
+check('快照有缓存，不是每次重算', hostSource.includes('WORK.ttl') && hostSource.includes('workSnapshot'));
+check('token 只报全会话累计', hostSource.includes('cacheReadTokens') && !hostSource.includes('perTurnTokens'));
+check('老会话缺字段也不炸', hostSource.includes('catch { values = {}; }'));
+// 功课页：多会话列表，点一行展开子任务
+check('卡片有两个 tab', clientJs.includes('fj-tabs') && clientJs.includes("setView('work')"));
+check('功课页列多会话', clientJs.includes('fj-work-list') && clientJs.includes('sessions.map(workRow)'));
+check('点一行展开子任务', clientJs.includes('fj-work-open') && clientJs.includes('workOpen'));
+check('子任务三态有记号', clientJs.includes("'✓'") && clientJs.includes("'◔'") && clientJs.includes("'○'"));
+check('数字用万/亿，不摆原始位数', clientJs.includes('1e8') && clientJs.includes('1e4'));
+check('空态不装样子', clientJs.includes('今日无功课'));
+// 佛光：有活在跑才亮，收工就收
+check('在跑才有佛光', clientJs.includes('fj-halo') && clientJs.includes('workRunning > 0 ? h('));
+check('开工收工各抬眼一次', /before === 0 && workRunning > 0/.test(clientJs) && /before > 0 && workRunning === 0/.test(clientJs));
+check('看功课时她只陪着，不盯屏幕', clientJs.includes("if (view === 'work' && open) return sprites.idle"));
+check('功课页勤拉，其余时候慢拉', clientJs.includes('5000 : 12000'));
+
 console.log('');
 if (failures) {
   console.log(`失败 ${failures} 项`);
