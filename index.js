@@ -45,6 +45,7 @@ export const SHELL_ROUTES = {
   segmentRead: '/dsh-fojing-pet/segment-read',
   catalog: '/dsh-fojing-pet/catalog.json',
   import: '/dsh-fojing-pet/import',
+  heartbeat: '/dsh-fojing-pet/heartbeat',
 };
 
 const SPRITES = {
@@ -708,6 +709,7 @@ export function apply(ctx, config) {
       const action = String(body.action || '');
       if (action === 'launch') return json(await launchShell(body.origin));
       if (action === 'quit') return json(quitShell());
+      if (action === 'heartbeat') return json(shellHeartbeat(body));
       return json({ ok: false, error: 'action 必须是 launch 或 quit' }, 400);
     },
     catalog: async () => {
@@ -799,10 +801,22 @@ export function apply(ctx, config) {
   // --- 桌面壳：独立进程 + 免鉴权回环路由 -----------------------------------
   let shellChild = null;
   let shellError = null;
+  // 手动启动的壳（桌面快捷方式、脚本）Host 是不知道的，靠它自己报到：
+  // 否则网页里会再画一只，桌上就站着两只莲鲸。
+  let shellBeatAt = 0;
+  let shellBeatPid = 0;
+  const SHELL_BEAT_TTL = 45000;
+
+  const externalShellAlive = () => {
+    if (!shellBeatAt || Date.now() - shellBeatAt > SHELL_BEAT_TTL) return false;
+    if (!shellBeatPid) return true;
+    try { process.kill(shellBeatPid, 0); return true; } catch { return false; }
+  };
 
   const shellStatus = () => ({
     supported: process.platform === 'win32',
-    running: !!shellChild,
+    running: !!shellChild || externalShellAlive(),
+    external: !shellChild && externalShellAlive(),
     platform: process.platform,
     error: shellError,
   });
@@ -841,6 +855,19 @@ export function apply(ctx, config) {
       try { shellChild.kill(); } catch { /* 已退出 */ }
       shellChild = null;
     }
+    // 自己报到的壳也要能收回来
+    if (externalShellAlive() && shellBeatPid) {
+      try { process.kill(shellBeatPid); } catch { /* 已退出 */ }
+    }
+    shellBeatAt = 0;
+    shellBeatPid = 0;
+    return { ok: true, ...shellStatus() };
+  };
+
+  const shellHeartbeat = (body) => {
+    const pid = Number(body?.pid);
+    shellBeatPid = Number.isInteger(pid) && pid > 0 ? pid : 0;
+    shellBeatAt = Date.now();
     return { ok: true, ...shellStatus() };
   };
 
@@ -895,6 +922,7 @@ export function apply(ctx, config) {
         register(SHELL_ROUTES.segmentRead, ['POST'], (request) => handlers.segmentRead(request)),
         register(SHELL_ROUTES.catalog, ['GET'], () => handlers.catalog()),
         register(SHELL_ROUTES.import, ['POST'], (request) => handlers.import(request)),
+        register(SHELL_ROUTES.heartbeat, ['GET', 'POST'], (request) => handlers.shell(request)),
       ];
       webCtx.effect(() => () => {
         for (const dispose of disposers) {

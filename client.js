@@ -12,7 +12,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
     const API = {
       state: '/api/dsh-fojing-pet.state',
@@ -29,10 +29,10 @@ window.__ModuleLoader__.load({
     const PET_H = 196;
 
     const CSS = `
-      [data-fojing-pet]{position:fixed;z-index:86;font-family:"Microsoft YaHei",Inter,ui-sans-serif,system-ui,"PingFang SC",sans-serif;color:#33555a;font-size:13px;line-height:1.65}
+      [data-fojing-pet]{position:fixed;z-index:86;width:220px;font-family:"Microsoft YaHei",Inter,ui-sans-serif,system-ui,"PingFang SC",sans-serif;color:#33555a;font-size:13px;line-height:1.65}
       [data-fojing-pet] *{box-sizing:border-box}
-      .fj-anchor{position:relative;display:flex;flex-direction:column;align-items:center}
-      .fj-pet{position:relative;z-index:1;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;cursor:grab;user-select:none;transition:transform .3s cubic-bezier(.22,.61,.36,1)}
+      .fj-anchor{position:relative;display:flex;flex-direction:column;align-items:center;width:100%}
+      .fj-pet{position:relative;z-index:1;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%;cursor:grab;user-select:none;transition:transform .3s cubic-bezier(.22,.61,.36,1)}
       .fj-pet:active{cursor:grabbing}
       .fj-pet:hover{transform:translateY(-4px)}
       .fj-img{display:block;height:${PET_H}px;width:auto;max-width:220px;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(60,90,88,.28));animation:fj-breathe 5.2s ease-in-out infinite}
@@ -41,24 +41,27 @@ window.__ModuleLoader__.load({
       .fj-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:#8cb7a4;box-shadow:0 0 6px rgba(140,183,164,.8);vertical-align:1px}
       .fj-dot[data-off="off"]{background:#d99b8f;box-shadow:0 0 6px rgba(217,155,143,.8)}
       /* ---- 古书卡片 ---- */
-      .fj-bubble{position:absolute;z-index:2;right:calc(100% + 6px);bottom:24px;width:min(364px,calc(100vw - 30px));animation:fj-in .18s ease-out}
-      .fj-anchor[data-side="right"] .fj-bubble{right:auto;left:calc(100% + 6px)}
-      .fj-card{position:relative;max-height:min(66vh,560px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+      /* 卡片浮在立绘上方，不参与排版：否则它会把整个浮层撑到视口那么宽 */
+      .fj-card{position:absolute;z-index:2;left:50%;bottom:calc(100% + 9px);
+        width:min(392px,calc(100vw - 24px));max-height:min(62vh,560px);
+        overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+        transform:translateX(calc(-50% + var(--fj-shift,0px)));
         scrollbar-width:thin;scrollbar-color:#c9b78f #f3e8d2;
         border:1px solid #e7d8ba;border-radius:22px;
         background:linear-gradient(158deg,#fffaf0 0%,#fff7e9 58%,#f8edd8 100%);
         box-shadow:0 22px 48px rgba(90,80,55,.22),0 2px 0 rgba(255,255,255,.9) inset;
-        padding:0 0 2px}
+        padding:0 0 2px;animation:fj-in .18s ease-out}
+      .fj-pet[data-drop="down"] .fj-card{bottom:auto;top:calc(100% + 9px)}
       .fj-card::-webkit-scrollbar{width:8px}
       .fj-card::-webkit-scrollbar-track{background:#f3e8d2;border-radius:8px}
       .fj-card::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#dcca9f,#c2ab7d);border-radius:8px}
       .fj-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;border-radius:21px 0 0 21px;
         background:linear-gradient(180deg,#f2e2bf,#dcc79c 45%,#cbb283);opacity:.95}
-      .fj-tail{position:absolute;right:-5px;bottom:44px;width:11px;height:11px;background:#f8edd8;border-right:1px solid #e7d8ba;border-top:1px solid #e7d8ba;transform:rotate(45deg);border-radius:2px}
-      .fj-anchor[data-side="right"] .fj-tail{right:auto;left:-5px;border:0;border-left:1px solid #e7d8ba;border-bottom:1px solid #e7d8ba}
+      .fj-tail{position:absolute;z-index:1;left:50%;margin-left:-5px;bottom:calc(100% + 4px);width:10px;height:10px;background:#f8edd8;border-right:1px solid #e7d8ba;border-bottom:1px solid #e7d8ba;transform:rotate(45deg);border-radius:2px}
+      .fj-pet[data-drop="down"] .fj-tail{bottom:auto;top:calc(100% + 4px);border:0;border-left:1px solid #e7d8ba;border-top:1px solid #e7d8ba}
       /* 顶部 */
-      .fj-head{display:flex;align-items:center;gap:6px;padding:13px 12px 9px 18px;cursor:grab}
-      .fj-head:active{cursor:grabbing}
+      .fj-head{display:flex;align-items:center;gap:6px;padding:13px 12px 9px 18px}
+
       .fj-eyebrow{flex:1;min-width:0;font-size:10px;font-weight:800;letter-spacing:.24em;color:#a08a68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .fj-nav{border:0;background:none;color:#8d7a5c;font-size:15px;line-height:1;padding:1px 5px;cursor:pointer;border-radius:5px}
       .fj-nav:hover:not(:disabled){color:#4a3f2d;background:rgba(200,180,140,.18)}
@@ -139,7 +142,8 @@ window.__ModuleLoader__.load({
       .fj-input{flex:1;min-width:0;padding:6px 10px;border:1px solid rgba(200,180,145,.65);border-radius:9px;background:#fffdf7;color:#33555a;font:12px/1.5 "Microsoft YaHei",sans-serif}
       .fj-input:focus{outline:none;border-color:#8cb7af;box-shadow:0 0 0 2px rgba(140,183,175,.18)}
       .fj-fetch-msg{margin:0 0 10px;padding:8px 10px;border-radius:9px;background:rgba(140,183,175,.13);color:#3f5f5c;font-size:11.5px;line-height:1.6}
-      @keyframes fj-in{from{opacity:0;transform:translateY(5px) scale(.985)}to{opacity:1;transform:none}}
+      /* 只动 opacity：transform 被 .fj-card 拿去定位了，动画里再写会把居中覆盖掉 */
+      @keyframes fj-in{from{opacity:0}to{opacity:1}}
       @keyframes fj-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.006)}}
       @keyframes fj-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
       @media (prefers-reduced-motion: reduce){
@@ -147,8 +151,10 @@ window.__ModuleLoader__.load({
         .fj-pet:hover{transform:none}
       }
       @media (max-width:560px){
-        .fj-bubble,.fj-anchor[data-side="right"] .fj-bubble{right:-8px;left:auto;bottom:calc(100% + 8px);width:min(364px,calc(100vw - 24px))}
-        .fj-tail,.fj-anchor[data-side="right"] .fj-tail{right:30px;left:auto;bottom:-5px;border:0;border-right:1px solid #e7d8ba;border-bottom:1px solid #e7d8ba}
+        .fj-card{width:calc(100vw - 20px);border-radius:18px}
+        .fj-body{padding:2px 14px 12px 16px}
+        .fj-title{font-size:21px}
+        .fj-cite{font-size:16.5px}
       }
     `;
 
@@ -163,9 +169,10 @@ window.__ModuleLoader__.load({
     const writePos = (pos) => {
       try { window.localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch { /* 位置只是尽力而为 */ }
     };
+    // 只夹立绘本身（220×约 224），卡片会自动找地方站，超出视口时再自己挪
     const clampPos = (pos) => ({
-      x: Math.max(8, Math.min(pos.x, window.innerWidth - 380)),
-      y: Math.max(8, Math.min(pos.y, window.innerHeight - 220)),
+      x: Math.max(8, Math.min(pos.x, Math.max(8, window.innerWidth - 228))),
+      y: Math.max(8, Math.min(pos.y, Math.max(8, window.innerHeight - 240))),
     });
 
     const getJson = async (url) => {
@@ -212,6 +219,11 @@ window.__ModuleLoader__.load({
       const [customUrl, setCustomUrl] = useState('');
       const [pos, setPos] = useState(readPos);
       const [spriteBroken, setSpriteBroken] = useState(false);
+      const [cardMax, setCardMax] = useState(0);
+      const [drop, setDrop] = useState('up');
+      const [shift, setShift] = useState(0);
+      const cardEl = useRef(null);
+      const petEl = useRef(null);
       const drag = useRef(null);
       const suppress = useRef(false);
       const pinned = useRef(null);
@@ -442,6 +454,39 @@ window.__ModuleLoader__.load({
         }
       };
 
+      // --- 卡片定位 ----------------------------------------------------------
+      // 卡片是绝对定位浮在立绘上方的，所以「放不放得下」得自己量：
+      // 上面不够高就往下开，左右贴边就用 translateX 推回来。
+      const measureCard = useCallback(() => {
+        const pet = petEl.current;
+        if (!pet) return;
+        const rect = pet.getBoundingClientRect();
+        const spaceUp = Math.max(0, rect.top - 14);
+        const spaceDown = Math.max(0, window.innerHeight - rect.bottom - 14);
+        const down = spaceUp < 300 && spaceDown > spaceUp;
+        setDrop(down ? 'down' : 'up');
+        setCardMax(Math.max(180, Math.min(560, down ? spaceDown : spaceUp)));
+      }, []);
+
+      useLayoutEffect(() => {
+        if (!open) { setShift(0); setCardMax(0); return; }
+        measureCard();
+        const card = cardEl.current;
+        if (!card) return;
+        const rect = card.getBoundingClientRect();
+        if (rect.left < 8) setShift((s) => s + Math.round(8 - rect.left));
+        else if (rect.right > window.innerWidth - 8) {
+          setShift((s) => s + Math.round(window.innerWidth - 8 - rect.right));
+        }
+      }, [open, view, current, sutra, pos, measureCard, shift]);
+
+      useEffect(() => {
+        if (!open) return undefined;
+        const onResize = () => { setShift(0); measureCard(); };
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, [open, measureCard]);
+
       // --- 逐句学习视图 ------------------------------------------------------
       const termList = (terms, key) => (Array.isArray(terms) && terms.length
         ? h('dl', { className: 'fj-terms', key },
@@ -627,13 +672,25 @@ window.__ModuleLoader__.load({
             disabled: running, onClick: () => { void regenerate(); },
           }, running ? '翻页中…' : '现在读一句')));
 
-      const card = h('div', { className: 'fj-card', role: 'dialog', 'aria-label': view === 'study' ? '逐句读' : view === 'fetch' ? '取经' : '今日读经' },
+      const card = h('div', {
+        className: 'fj-card',
+        ref: cardEl,
+        role: 'dialog',
+        'aria-label': view === 'study' ? '逐句读' : view === 'fetch' ? '取经' : '今日读经',
+        // 卡片在立绘的 div 里：不拦一下，点卡片里任何地方都会冒泡到立绘上，被当成「收起」
+        onClick: (event) => event.stopPropagation(),
+        onPointerDown: (event) => event.stopPropagation(),
+        onPointerUp: (event) => event.stopPropagation(),
+        style: {
+          '--fj-shift': `${shift}px`,
+          maxHeight: cardMax ? `${cardMax}px` : undefined,
+        },
+      },
         view === 'fetch' ? fetchView() : view === 'study' ? studyView() : cardView(),
         error ? h('p', { className: 'fj-warn', style: { margin: '0 20px 12px' } }, '连接中断，重试中…') : null,
         shell?.error ? h('p', { className: 'fj-warn', style: { margin: '0 20px 12px' } }, `桌宠壳：${String(shell.error).slice(0, 90)}`) : null);
 
       const style = pos ? { left: pos.x, top: pos.y } : { right: 20, bottom: 96 };
-      const side = pos && pos.x < 400 ? 'right' : 'left';
 
       // 桌面壳站着的时候，界面里的那只就隐身，只留一枚收回按钮
       if (shell?.running) {
@@ -654,9 +711,11 @@ window.__ModuleLoader__.load({
 
       return h('div', { style, 'data-fojing-pet': true },
         h('style', { dangerouslySetInnerHTML: { __html: CSS } }),
-        h('div', { className: 'fj-anchor', 'data-side': side },
+        h('div', { className: 'fj-anchor' },
           h('div', {
             className: 'fj-pet',
+            ref: petEl,
+            'data-drop': drop,
             onPointerDown: startDrag,
             onPointerMove: onDrag,
             onPointerUp: endDrag,

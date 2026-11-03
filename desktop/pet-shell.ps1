@@ -23,6 +23,7 @@ $StateUrl = "$Origin/dsh-fojing-pet/pet.json"
 $NextUrl  = "$Origin/dsh-fojing-pet/next"
 $ReadUrl  = "$Origin/dsh-fojing-pet/read"
 $ImportUrl  = "$Origin/dsh-fojing-pet/import"
+$BeatUrl   = "$Origin/dsh-fojing-pet/heartbeat"
 $CatalogUrl = "$Origin/dsh-fojing-pet/catalog.json"
 
 $PetHeight  = 210
@@ -675,6 +676,11 @@ function Invoke-Next {
 }
 
 # --- 联网取经 ---------------------------------------------------------------
+# 告诉 Host「我站着呢」，否则网页里会再画一只，桌上就两只莲鲸
+function Send-Heartbeat {
+  try { Invoke-PetApi -Method 'POST' -Url $BeatUrl -Body @{ action = 'heartbeat'; pid = $PID } | Out-Null } catch { }
+}
+
 function Get-Catalog {
   try {
     $payload = Invoke-PetApi -Method 'GET' -Url $CatalogUrl
@@ -848,6 +854,7 @@ $timer.Add_Tick({
     if (-not (Test-OnScreen)) { Reset-PetPosition }
     Refresh-State | Out-Null
     if ($script:ShowingCard -and -not $script:ShowingStudy) { Render-Card }
+    Send-Heartbeat
   })
 $timer.Start()
 
@@ -855,6 +862,7 @@ $window.Add_Loaded({
     if (-not (Test-OnScreen)) { Reset-PetPosition }
     Set-PetImage 'idle'
     Refresh-State | Out-Null
+    Send-Heartbeat
   })
 
 # 最后一道保险：单个交互出错时把错误显示在状态行，别让整个桌宠退出。

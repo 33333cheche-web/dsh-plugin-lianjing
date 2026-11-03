@@ -199,6 +199,21 @@ check('host 注册了取经路由', hostSource.includes('ROUTES.import') && host
 check('取经只在白名单站点抓', hostSource.includes('isAllowedUrl'));
 check('悬浮壳右键能取经', shellSource.includes('Invoke-Import') && shellSource.includes("'取经（联网）'"));
 
+console.log('small screen layout');
+const clientJs = await readFile(join(root, 'client.js'), 'utf8');
+// 卡片曾经是普通流内元素，会把浮层撑到视口那么宽，小屏上整片糊住
+check('卡片是浮层不再撑宽容器', /\.fj-card\{position:absolute/.test(clientJs));
+check('卡片宽度封顶', clientSource.includes('width:min(392px,calc(100vw - 24px))'));
+check('卡片左右夹进视口', clientSource.includes('measureCard') && clientSource.includes('setShift'));
+check('上方放不下会往下开', clientSource.includes('data-drop') && clientSource.includes("setDrop(down ? 'down' : 'up')"));
+check('卡片高度按剩余空间收', clientSource.includes('setCardMax') && clientSource.includes('spaceUp'));
+check('小屏有专门的宽度回退', clientSource.includes('@media (max-width:560px)'));
+check('壳自己报到，避免两只莲鲸', hostSource.includes('externalShellAlive') && shellSource.includes('Send-Heartbeat'));
+check('壳心跳带 pid 能收回', shellSource.includes('pid = $PID') && hostSource.includes('shellHeartbeat'));
+// 卡片挂在立绘的 div 里，不拦冒泡的话点卡片里任何按钮都会冒到立绘上被当成「收起卡片」
+check('卡片拦下冒泡，点按钮不会收起', /className: 'fj-card'[\s\S]{0,700}?onClick: \(event\) => event\.stopPropagation\(\)/.test(clientJs));
+check('卡片入场动画不再覆盖定位', !/@keyframes fj-in\{from\{opacity:0;transform/.test(clientJs));
+
 console.log('');
 if (failures) {
   console.log(`失败 ${failures} 项`);
