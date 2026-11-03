@@ -1,0 +1,51 @@
+{
+  "name": "dsh-plugin-fojing-pet",
+  "version": "1.1.0",
+  "description": "莲鲸 · 佛经学习桌宠：四部汉传佛经逐句学习（原文+释义+名相+练习），桌面悬浮壳",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop-pet",
+    "pet",
+    "buddhism",
+    "sutra",
+    "佛经",
+    "心经",
+    "莲鲸"
+  ],
+  "type": "module",
+  "main": "./index.js",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "assets/",
+    "corpus/",
+    "skill/",
+    "desktop/",
+    "docs/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node verify/smoke.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}

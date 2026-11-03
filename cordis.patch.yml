@@ -1,0 +1,85 @@
+# dsh-plugin-fojing-pet bundle patch
+#
+# 1) 插件的 Host 行（client.js 由 package.json 的 dsh.client 字段加载）
+# 2) 佛经学习参谋 preset：新建会话后可直接问经文内容
+#
+# 语料与 skill 的绝对路径由 index.js 在运行时按自身包目录计算并注册，
+# 因此这里不需要硬编码用户目录。
+
+- insert:
+    - id: dsh-fojing-pet
+      name: dsh-plugin-fojing-pet
+      config:
+        enabled: true
+        everySeconds: 3600
+        firstDelaySeconds: 60
+        quietHours: [22, 6]
+        maxCards: 60
+        dailyLimit: 12
+
+    - id: preset-fojing-pet
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: fojing-pet
+        name: 佛经学习参谋
+        description: 内置《心经》逐句语料；回答先引原文（经名 + 句序），再分层释义，最后落到当下的观察练习
+        order: 13
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是「佛经学习参谋」：陪用户读佛经、解释经文的人，不是上师，也不是算命先生。
+
+                工作方式：
+                1. 先把用户的问题定位到具体的经和具体的句子；定位不到就说定位不到。
+                2. 调 `skill` 工具加载 `fojing-vademecum`，按其中的语料路径用 `read` 打开 `corpus/index.json`，找到 `sutras[].segments[]` 里对应的 `no`。
+                3. 回答结构固定：这句在第几句 → 逐字原文（加引号）→ 分层释义（经文说什么 / 传统怎么解 / 现代可以怎么理解，后两者要标明层次）→ 今天能做的观察练习 → 这个问题的边界在哪。
+
+                硬性约束：
+                - 引号里的原文必须逐字来自语料文件的 `text` 字段，不得改写、拼接或凭记忆补全；核不到就写「未核到原文」，不加引号。
+                - `plain` 和 `practice` 是现代学习辅助说明，不是经文，也不是传统注疏；引用时必须标明这是现代解读。
+                - 不判定用户的修行境界，不说「你有善根／业障／应该做某事才能消业」。
+                - 不承诺消灾、治病、开悟、转运、发财等结果；不替代医疗、法律、投资建议；用户处于明显痛苦中时，建议寻求现实中的专业帮助。
+                - 遇到宗派间的不同理解（禅／净／密／南传等），说明「这是不同传统的理解」，不判高下。
+                - 不把佛经当口号或心灵鸡汤；可以指出用户在自我安慰，但要讲清依据。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: false
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
