@@ -157,11 +157,10 @@ window.__ModuleLoader__.load({
       .fj-img{position:relative;z-index:1}
       /* ---- 敲木鱼：点她中间，飘一句彩头 ---- */
       .fj-knocks{position:absolute;left:0;right:0;top:0;z-index:3;pointer-events:none;height:0}
-      .fj-knock{position:absolute;left:50%;top:2px;white-space:nowrap;font-size:11.5px;font-weight:700;letter-spacing:.02em;
-        color:#5c5a54;background:rgba(255,251,242,.94);border:1px solid #e2d3b6;border-radius:6px;
-        padding:2px 9px 3px;box-shadow:0 2px 9px rgba(140,110,60,.16);
+      .fj-knock{position:absolute;left:50%;top:2px;white-space:nowrap;font-size:13px;font-weight:800;letter-spacing:.04em;
+        color:#96662c;background:none;border:0;padding:0;
         animation:fj-knock-float 1.05s cubic-bezier(.2,.7,.3,1) forwards}
-      .fj-knock b{margin-left:2px;color:#c08a2e;font-weight:800}
+      .fj-knock b{margin-left:1px;color:inherit;font-weight:800}
       @keyframes fj-knock-float{
         0%{opacity:0;transform:translate(-50%,8px) scale(.86)}
         18%{opacity:1;transform:translate(-50%,-2px) scale(1.06)}
@@ -325,6 +324,7 @@ window.__ModuleLoader__.load({
       const [knocking, setKnocking] = useState(false);
       const [meritCount, setMeritCount] = useState(0);
       const audioRef = useRef(null);
+      const knockSlot = useRef(0);   // 连敲时的位置槽：第一下正中
       const cardEl = useRef(null);
       const petEl = useRef(null);
       const drag = useRef(null);
@@ -362,7 +362,8 @@ window.__ModuleLoader__.load({
         window.setTimeout(() => setKnocking(false), 460);
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const label = MERIT_LABELS[Math.floor(Math.random() * MERIT_LABELS.length)];
-        const drift = `${Math.round((Math.random() - 0.5) * 34)}px`;
+        const slot = knockSlot.current++ % 5;
+        const drift = ['0px', '-58px', '58px', '-29px', '29px'][slot];
         setKnocks((list) => [...list.slice(-5), { id, label, drift }]);
         window.setTimeout(() => {
           setKnocks((list) => list.filter((item) => item.id !== id));

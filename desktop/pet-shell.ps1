@@ -1010,7 +1010,7 @@ $script:KnockRunspace = $null
 $script:KnockSound = $null      # SoundPlayer，启动时下好 19KB 的 wav 预加载
 $script:KnockCount = 0          # 服务端返回的累计敲击数
 $script:KnockFloats = New-Object System.Collections.ArrayList
-$script:FloatSeed = 0
+
 $script:WavPending = $null
 $script:WavRunspace = $null
 $script:KnockSpritePath = ''      # 敲木鱼那张立绘（本地资产优先，其次临时目录里下到的）
@@ -1041,46 +1041,33 @@ function Show-KnockFloat {
     $w = [double]$floatLayer.ActualWidth
     $h = [double]$floatLayer.ActualHeight
     if ($w -le 0 -or $h -le 0) { return }
-    # 连敲时左右错开，别叠成一坨
-    $spread = @(-70, 0, 70, -35, 35)
-    $off = [double]$spread[$script:FloatSeed % $spread.Count]
-    $script:FloatSeed = ($script:FloatSeed + 1) % 60000
+    # 连敲时左右错开：第一下正中，之后依次往两边挪，别叠成一坨
+    $spread = @(0, -62, 62, -31, 31)
+    $off = [double]$spread[$script:KnockFloats.Count % $spread.Count]
 
-    # 一张正经小纸条：圆角 10、1px 描边、很轻的投影；不用 999（小字号会变橄榄球）
-    $pill = New-Object System.Windows.Controls.Border
-    $pill.CornerRadius = New-Object System.Windows.CornerRadius 6
-    $pill.Background = New-Brush '#FFFBF2'
-    $pill.BorderThickness = New-Object System.Windows.Thickness 1
-    $pill.BorderBrush = New-Brush '#E2D3B6'
-    $pill.Padding = New-Object System.Windows.Thickness 12, 3, 12, 4
-    $pill.IsHitTestVisible = $false
-    $shadow = New-Object System.Windows.Media.Effects.DropShadowEffect
-    $shadow.BlurRadius = 10
-    $shadow.Opacity = 0.12
-    $shadow.ShadowDepth = 2
-    $pill.Effect = $shadow
 
-    $tb = New-Object System.Windows.Controls.TextBlock
-    $tb.FontFamily = New-Object System.Windows.Media.FontFamily 'Microsoft YaHei'
-    $tb.FontSize = 12
-    $tb.FontWeight = ConvertTo-FontWeight 'SemiBold'
-    $tb.TextWrapping = 'NoWrap'
+    # 一行字：咖金色、无底色无边框无图标
+    $el = New-Object System.Windows.Controls.TextBlock
+    $el.FontFamily = New-Object System.Windows.Media.FontFamily 'Microsoft YaHei'
+    $el.FontSize = 13
+    $el.FontWeight = ConvertTo-FontWeight 'Bold'
+    $el.TextWrapping = 'NoWrap'
+    $el.IsHitTestVisible = $false
     $runLabel = New-Object System.Windows.Documents.Run $Label
-    $runLabel.Foreground = New-Brush '#5C5A54'
-    $runAmount = New-Object System.Windows.Documents.Run (' +' + $Amount)
-    $runAmount.Foreground = New-Brush '#A79E8C'
-    $tb.Inlines.Add($runLabel) | Out-Null
-    $tb.Inlines.Add($runAmount) | Out-Null
-    $pill.Child = $tb
+    $runLabel.Foreground = New-Brush '#96662C'
+    $runAmount = New-Object System.Windows.Documents.Run ('+' + $Amount)
+    $runAmount.Foreground = New-Brush '#96662C'
+    $el.Inlines.Add($runLabel) | Out-Null
+    $el.Inlines.Add($runAmount) | Out-Null
 
-    $pill.Measure([System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))
-    $pw = [double]$pill.DesiredSize.Width
-    [System.Windows.Controls.Canvas]::SetLeft($pill, ($w / 2) - ($pw / 2) + $off)
-    [System.Windows.Controls.Canvas]::SetTop($pill, ($h * 0.30))
-    $floatLayer.Children.Add($pill) | Out-Null
+    $el.Measure([System.Windows.Size]::new([double]::PositiveInfinity, [double]::PositiveInfinity))
+    $pw = [double]$el.DesiredSize.Width
+    [System.Windows.Controls.Canvas]::SetLeft($el, ($w / 2) - ($pw / 2) + $off)
+    [System.Windows.Controls.Canvas]::SetTop($el, ($h * 0.24))
+    $floatLayer.Children.Add($el) | Out-Null
 
     $tt = New-Object System.Windows.Media.TranslateTransform
-    $pill.RenderTransform = $tt
+    $el.RenderTransform = $tt
     $animY = New-Object System.Windows.Media.Animation.DoubleAnimation
     $animY.From = 0.0
     $animY.To = -52.0
@@ -1095,9 +1082,9 @@ function Show-KnockFloat {
     $animO.To = 0.0
     $animO.BeginTime = [TimeSpan]::FromMilliseconds(320)
     $animO.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(580))
-    $pill.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $animO)
+    $el.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $animO)
 
-    $script:KnockFloats.Add(@{ el = $pill; until = [DateTime]::Now.AddMilliseconds(950) }) | Out-Null
+    $script:KnockFloats.Add(@{ el = $el; until = [DateTime]::Now.AddMilliseconds(950) }) | Out-Null
   } catch { }
 }
 
