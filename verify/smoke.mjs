@@ -95,6 +95,18 @@ for (const file of ['pet-idle.png', 'pet-open.png', 'pet-read.png', 'icon-256.pn
   check(`${file} 是 PNG`, bytes[0] === 0x89 && bytes[1] === 0x50);
 }
 
+// 四张立绘必须同画布同基线：换图的那一下不能跳
+const spriteSize = async (file) => {
+  const bytes = await readFile(join(root, 'assets', file));
+  return { w: bytes.readUInt32BE(16), h: bytes.readUInt32BE(20), size: bytes.length };
+};
+const frames = {};
+for (const file of ['pet-idle.png', 'pet-open.png', 'pet-read.png', 'pet-knock.png']) {
+  frames[file] = await spriteSize(file);
+  check(`${file} 在 460x479 画布上`, frames[file].w === 460 && frames[file].h === 479, `${frames[file].w}x${frames[file].h}`);
+}
+check('敲木鱼立绘随包', frames['pet-knock.png'].size > 1024);
+
 console.log('client');
 const clientSource = await readFile(join(root, 'client.js'), 'utf8');
 check('client 注册到 shell.overlay', clientSource.includes("ctx.slots.inject('shell.overlay'"));
