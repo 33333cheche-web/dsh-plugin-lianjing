@@ -158,7 +158,7 @@ window.__ModuleLoader__.load({
       /* ---- 敲木鱼：点她中间，飘一句彩头 ---- */
       .fj-knocks{position:absolute;left:0;right:0;top:0;z-index:3;pointer-events:none;height:0}
       .fj-knock{position:absolute;left:50%;top:2px;white-space:nowrap;font-size:13px;font-weight:800;letter-spacing:.04em;
-        color:#96662c;background:none;border:0;padding:0;
+        color:#c69a4e;background:none;border:0;padding:0;
         animation:fj-knock-float 1.05s cubic-bezier(.2,.7,.3,1) forwards}
       .fj-knock b{margin-left:1px;color:inherit;font-weight:800}
       @keyframes fj-knock-float{

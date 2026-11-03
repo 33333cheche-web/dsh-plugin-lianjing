@@ -294,8 +294,8 @@ check('页脚攒功德不数敲击', clientJs.includes('已积功德'));
 // 敲木鱼那一拍要换立绘；素材没随包时宿主退回 idle，界面不开天窗
 check('敲击有专门立绘位', hostSource.includes("knock: 'pet-knock.png'") && clientJs.includes('knocking && sprites.knock'));
 check('缺立绘安静回退', hostSource.includes('candidates') && hostSource.includes('SPRITES[sprite] || SPRITES.idle'));
-check('彩头是咖金纯字、不留底板', clientJs.includes('color:#96662c') && clientJs.includes('background:none;border:0;padding:0'));
-check('壳里的彩头也只剩字', shellSource.includes('#96662C') && shellSource.includes('Inlines.Add($runAmount)'));
+check('彩头是咖金纯字、不留底板', clientJs.includes('color:#c69a4e') && clientJs.includes('background:none;border:0;padding:0'));
+check('壳里的彩头也只剩字', shellSource.includes('#C69A4E') && shellSource.includes('Inlines.Add($runAmount)'));
 check('壳里的小元件也不是橄榄', !shellSource.includes('CornerRadius 999') && shellSource.includes('CornerRadius 6'));
 
 console.log('');

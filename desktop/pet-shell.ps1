@@ -1054,9 +1054,9 @@ function Show-KnockFloat {
     $el.TextWrapping = 'NoWrap'
     $el.IsHitTestVisible = $false
     $runLabel = New-Object System.Windows.Documents.Run $Label
-    $runLabel.Foreground = New-Brush '#96662C'
+    $runLabel.Foreground = New-Brush '#C69A4E'
     $runAmount = New-Object System.Windows.Documents.Run ('+' + $Amount)
-    $runAmount.Foreground = New-Brush '#96662C'
+    $runAmount.Foreground = New-Brush '#C69A4E'
     $el.Inlines.Add($runLabel) | Out-Null
     $el.Inlines.Add($runAmount) | Out-Null
 
