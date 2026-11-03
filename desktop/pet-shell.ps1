@@ -25,9 +25,12 @@ $ReadUrl  = "$Origin/dsh-fojing-pet/read"
 $ImportUrl  = "$Origin/dsh-fojing-pet/import"
 $BeatUrl   = "$Origin/dsh-fojing-pet/heartbeat"
 $CatalogUrl = "$Origin/dsh-fojing-pet/catalog.json"
+$WorkUrl  = "$Origin/dsh-fojing-pet/work.json"
 
 $PetHeight  = 210
 $CardHeight = 470
+# 功课页要装 6 行会话（约 600 DIP），比读经卡片高；但它仍然是「卡片」，不是整屏。
+$WorkCardHeight = 620
 $OpenPetHeight = 210
 $WindowWidth = 448
 
@@ -85,6 +88,75 @@ function New-Text {
 function New-Brush {
   param([string]$Hex)
   return (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($Hex)))
+}
+
+# --- 数字与时长的中文写法 -----------------------------------------------------
+# 桌面上扫一眼就够：1.47亿 / 23.4万 / 860，不摆一长串数字。
+function Format-TokenCount {
+  param($Value)
+  $n = 0.0
+  if ($null -ne $Value) { try { $n = [double]$Value } catch { $n = 0 } }
+  if ($n -le 0) { return '0' }
+  if ($n -ge 100000000) { return ([Math]::Round($n / 100000000, 2).ToString() + '亿') }
+  if ($n -ge 10000) { return ([Math]::Round($n / 10000, 1).ToString() + '万') }
+  return ([Math]::Round($n).ToString())
+}
+
+# 墙钟时长：2小时41分 / 12分 / 38秒
+function Format-DurationMs {
+  param($Value)
+  # 注意：参数不能叫 $Ms —— PowerShell 变量名大小写不敏感，下面 $ms 会把它覆盖掉
+  $ms = 0.0
+  if ($null -ne $Value) { try { $ms = [double]$Value } catch { $ms = 0 } }
+  if ($ms -le 0) { return '—' }
+  $total = [Math]::Floor($ms / 1000)
+  if ($total -lt 60) { return ('{0}秒' -f [int]$total) }
+  if ($total -lt 3600) { return ('{0}分' -f [int][Math]::Floor($total / 60)) }
+  if ($total -lt 86400) {
+    $h = [int][Math]::Floor($total / 3600)
+    $m = [int][Math]::Floor(($total % 3600) / 60)
+    if ($m -le 0) { return ('{0}小时' -f $h) }
+    return ('{0}小时{1}分' -f $h, $m)
+  }
+  return ('{0}天{1}小时' -f [int][Math]::Floor($total / 86400), [int][Math]::Floor(($total % 86400) / 3600))
+}
+
+# 距今：刚刚 / 12分钟前 / 3小时前 / 2天前
+function Format-Ago {
+  param($Value)
+  # 同理：参数别叫 $Ms
+  $ms = 0.0
+  if ($null -ne $Value) { try { $ms = [double]$Value } catch { $ms = 0 } }
+  if ($ms -le 0) { return '刚刚' }
+  if ($ms -lt 60000) { return '刚刚' }
+  if ($ms -lt 3600000) { return ('{0}分钟前' -f [int][Math]::Floor($ms / 60000)) }
+  if ($ms -lt 86400000) { return ('{0}小时前' -f [int][Math]::Floor($ms / 3600000)) }
+  return ('{0}天前' -f [int][Math]::Floor($ms / 86400000))
+}
+
+# 会话短名：宿主给的 short 偶尔是「session-」这种没剥干净的值，兜底从 id 里再取一次
+function Get-ShortName {
+  param($Session)
+  $short = ''
+  try { if ($Session -and $Session.short) { $short = ([string]$Session.short).Trim() } } catch { }
+  if ($short -and $short -ne 'session-') { return $short }
+  $id = ''
+  try { if ($Session -and $Session.id) { $id = [string]$Session.id } } catch { }
+  if ($id.StartsWith('session-')) { $id = $id.Substring(8) }
+  if ($id.Length -gt 8) { $id = $id.Substring(0, 8) }
+  if (-not $id) { return '?' }
+  return $id
+}
+
+# 离下一次自动出经还有几秒（给立绘下面那个小标签算倒计时）
+function Get-NextRunLeft {
+  try {
+    if (-not $script:State -or -not $script:State.nextRunAt) { return 0 }
+    $next = [DateTimeOffset]::Parse([string]$script:State.nextRunAt)
+    $left = ($next - [DateTimeOffset]::Now).TotalSeconds
+    if ($left -gt 0) { return $left }
+  } catch { }
+  return 0
 }
 
 # 经书选择用的圆角小胶囊
@@ -250,7 +322,11 @@ $scroll.Resources.Add([System.Windows.Controls.Primitives.ScrollBar], $scrollBar
 $cardPanel = New-Object System.Windows.Controls.StackPanel
 $scroll.Content = $cardPanel
 # 换经文后正文高度会变，这时自动回到顶部；用户自己滚动不触发（高度没变）。
-$cardPanel.Add_SizeChanged({ $scroll.ScrollToVerticalOffset(0) })
+# 功课页会自己记住滚动位置（展开一行不该被拉回顶部），所以那一页不触发。
+$cardPanel.Add_SizeChanged({ if ($script:CardTab -ne 'work') { $scroll.ScrollToVerticalOffset(0) } })
+
+# 读经页的内容整块塞进 readPanel：切到「功课」时整块收起，原来的渲染逻辑一行都不用改。
+$readPanel = New-Object System.Windows.Controls.StackPanel
 
 # 卡片分两行：上面可滚动正文，下面固定操作栏，按钮不会被正文顶出视野。
 $cardShell = New-Object System.Windows.Controls.Grid
@@ -353,24 +429,74 @@ $btnClose = New-LinkButton -Label '收起' -Color '#7A8F88'
 $btnNext  = New-LinkButton -Label '再读一句'
 $btnMore  = New-LinkButton -Label '展开全文' -Color '#7A8F88'
 $btnMore.ToolTip = '把这一句的白话与练习展开或收起'
+# 功课页专用：手动拉一次 work.json（不点也会自动每 5 秒拉）
+$btnRefresh = New-LinkButton -Label '刷新' -Color '#7A8F88'
+$btnRefresh.Visibility = 'Collapsed'
+$btnRow.Children.Add($btnRefresh) | Out-Null
 $btnRow.Children.Add($btnMore) | Out-Null
 $btnRow.Children.Add($btnClose) | Out-Null
 $btnRow.Children.Add($btnNext) | Out-Null
 
 $txtStatus = New-Text -Text '' -Size 9 -Color '#C07D6F' -Margin '0,6,0,0'
 
-$cardPanel.Children.Add($headRow) | Out-Null
-$cardPanel.Children.Add($txtTitle) | Out-Null
-$cardPanel.Children.Add($txtMeta) | Out-Null
-$cardPanel.Children.Add($pickerPanel) | Out-Null
-$cardPanel.Children.Add($rule) | Out-Null
-$cardPanel.Children.Add($txtLabel1) | Out-Null
-$cardPanel.Children.Add($txtCite) | Out-Null
-$cardPanel.Children.Add($noteBorder) | Out-Null
-$cardPanel.Children.Add($txtLabelTerms) | Out-Null
-$cardPanel.Children.Add($termsPanel) | Out-Null
-$cardPanel.Children.Add($txtLabel2) | Out-Null
-$cardPanel.Children.Add($txtPractice) | Out-Null
+$readPanel.Children.Add($headRow) | Out-Null
+$readPanel.Children.Add($txtTitle) | Out-Null
+$readPanel.Children.Add($txtMeta) | Out-Null
+$readPanel.Children.Add($pickerPanel) | Out-Null
+$readPanel.Children.Add($rule) | Out-Null
+$readPanel.Children.Add($txtLabel1) | Out-Null
+$readPanel.Children.Add($txtCite) | Out-Null
+$readPanel.Children.Add($noteBorder) | Out-Null
+$readPanel.Children.Add($txtLabelTerms) | Out-Null
+$readPanel.Children.Add($termsPanel) | Out-Null
+$readPanel.Children.Add($txtLabel2) | Out-Null
+$readPanel.Children.Add($txtPractice) | Out-Null
+
+# --- 功课面板：静态骨架 -------------------------------------------------------
+# 会话行是数据驱动的，每次数据变了在 Render-Work 里重建；这里只搭 tab 条和容器。
+$tabBar = New-Object System.Windows.Controls.StackPanel
+$tabBar.Orientation = 'Horizontal'
+$tabBar.Margin = (New-Thickness '0,0,0,10')
+
+$txtWorkEyebrow = New-Text -Text '莲鲸手记 · 功课' -Size 10 -Color $Muted -Weight 'Bold' -Margin '0,0,0,2'
+
+$workTitleRow = New-Object System.Windows.Controls.Grid
+$wtCol0 = New-Object System.Windows.Controls.ColumnDefinition
+$wtCol0.Width = New-Object System.Windows.GridLength 1, 'Star'
+$wtCol1 = New-Object System.Windows.Controls.ColumnDefinition
+$wtCol1.Width = [System.Windows.GridLength]::Auto
+[void]$workTitleRow.ColumnDefinitions.Add($wtCol0)
+[void]$workTitleRow.ColumnDefinitions.Add($wtCol1)
+
+$txtWorkTitle = New-Text -Text '手上的活' -Size 20 -Color $Ink -Family 'KaiTi' -Margin '0,0,0,0'
+$txtWorkTitle.VerticalAlignment = 'Bottom'
+$txtWorkMeta = New-Text -Text '' -Size 10.5 -Color $Muted -Weight 'Bold' -Margin '0,0,2,3'
+$txtWorkMeta.HorizontalAlignment = 'Right'
+$txtWorkMeta.VerticalAlignment = 'Bottom'
+[System.Windows.Controls.Grid]::SetColumn($txtWorkTitle, 0)
+[System.Windows.Controls.Grid]::SetColumn($txtWorkMeta, 1)
+$workTitleRow.Children.Add($txtWorkTitle) | Out-Null
+$workTitleRow.Children.Add($txtWorkMeta) | Out-Null
+
+$workRule = New-Object System.Windows.Controls.Border
+$workRule.Height = 1
+$workRule.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#D9C6A4')))
+$workRule.Margin = New-Object System.Windows.Thickness 0, 7, 0, 6
+
+$workList = New-Object System.Windows.Controls.StackPanel
+$txtWorkNote = New-Text -Text '' -Size 9.5 -Color '#A89A80' -Margin '2,8,0,2'
+
+$workPanel = New-Object System.Windows.Controls.StackPanel
+$workPanel.Visibility = 'Collapsed'
+$workPanel.Children.Add($txtWorkEyebrow) | Out-Null
+$workPanel.Children.Add($workTitleRow) | Out-Null
+$workPanel.Children.Add($workRule) | Out-Null
+$workPanel.Children.Add($workList) | Out-Null
+$workPanel.Children.Add($txtWorkNote) | Out-Null
+
+$cardPanel.Children.Add($tabBar) | Out-Null
+$cardPanel.Children.Add($readPanel) | Out-Null
+$cardPanel.Children.Add($workPanel) | Out-Null
 
 $footPanel.Children.Add($btnRow) | Out-Null
 $footPanel.Children.Add($txtStatus) | Out-Null
@@ -412,11 +538,47 @@ $petHost.Children.Add($badge) | Out-Null
 
 $stack.Children.Add($petHost) | Out-Null
 
+# 立绘下面的小标签：跟网页里的 .fj-tag 同一套语义（状态点 + 一行字）。
+# 有功课在跑时改成「N 个在跑」；否则保持原来的说法：静坐中 / 翻经中 / MM:SS 后再读。
+$tagBorder = New-Object System.Windows.Controls.Border
+$tagBorder.CornerRadius = New-Object System.Windows.CornerRadius 999
+$tagBorder.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#FFFBF2')))
+$tagBorder.BorderThickness = New-Object System.Windows.Thickness 1
+$tagBorder.BorderBrush = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#E2D3B6')))
+$tagBorder.Padding = New-Object System.Windows.Thickness 9, 2, 9, 3
+$tagBorder.HorizontalAlignment = 'Center'
+$tagBorder.Margin = New-Object System.Windows.Thickness 0, 3, 0, 2
+
+$tagLine = New-Object System.Windows.Controls.StackPanel
+$tagLine.Orientation = 'Horizontal'
+$tagDot = New-Object System.Windows.Shapes.Ellipse
+$tagDot.Width = 5.5
+$tagDot.Height = 5.5
+$tagDot.Fill = New-Brush '#8CB7AF'
+$tagDot.Margin = New-Object System.Windows.Thickness 0, 0, 5, 0
+$tagDot.VerticalAlignment = 'Center'
+$tagText = New-Text -Text '静坐中' -Size 10 -Color '#3F5F5C' -Weight 'Bold'
+$tagText.VerticalAlignment = 'Center'
+$tagLine.Children.Add($tagDot) | Out-Null
+$tagLine.Children.Add($tagText) | Out-Null
+$tagBorder.Child = $tagLine
+$stack.Children.Add($tagBorder) | Out-Null
+
 # --- 状态 -------------------------------------------------------------------
 $script:State = $null
 $script:Busy = $false
 $script:ShowingStudy = $false
 $script:Sutra = $null
+
+# --- 功课面板状态 -----------------------------------------------------------
+$script:CardTab = 'read'         # read | work
+$script:WorkData = $null         # 最近一次成功拉到的 work.json
+$script:WorkFailed = $false      # 上一拍失败（有旧数据就继续用旧的）
+$script:WorkOpenId = ''          # 展开的那一行（同一时间只展开一行）
+$script:WorkPending = $null      # 飞行中的异步请求
+$script:WorkRunspace = $null     # 复用的后台 runspace：网络请求不在 UI 线程上跑
+$script:WorkSignature = ''       # 数据指纹：没变就不重建行，免得每 5 秒闪一下
+$script:NextWorkAt = [DateTime]::MinValue
 
 $spriteIdle = Join-Path $AssetDir 'pet-idle.png'
 $spriteOpen = Join-Path $AssetDir 'pet-open.png'
@@ -557,6 +719,8 @@ function Get-PageCard {
 
 function Render-Card {
   if (-not $script:State) { return }
+  # 在功课页时读经卡片是收起的：重建它没有意义，还会把功课页的滚动位置拉回顶部
+  if ($script:CardTab -eq 'work') { return }
   $cards = @($script:State.cards)
   $card = Get-PageCard
   if (-not $card) {
@@ -678,6 +842,642 @@ function Refresh-State {
   }
 }
 
+# --- 功课：拉数据 -------------------------------------------------------------
+# 网络请求一律丢到后台 runspace 里用同步 Invoke-RestMethod 跑；UI 线程每 600ms
+# 只看一眼「回来没」。断网/慢网时窗口照样能拖、能点，绝不卡死。
+
+function Request-WorkUpdate {
+  # 把下一次拉取提前到现在（打开卡片 / 切页 / 手点刷新时用）
+  $script:NextWorkAt = [DateTime]::MinValue
+}
+
+function Start-WorkFetch {
+  if ($script:WorkPending) { return }
+  try {
+    $rsState = ''
+    if ($script:WorkRunspace) { $rsState = [string]$script:WorkRunspace.RunspaceStateInfo.State }
+    if ($rsState -ne 'Opened') {
+      try { if ($script:WorkRunspace) { $script:WorkRunspace.Dispose() } } catch { }
+      $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+      $rs = [runspacefactory]::CreateRunspace($iss)
+      $rs.Open()
+      $script:WorkRunspace = $rs
+    }
+    $fetchScript = @'
+param([string]$Url)
+$ErrorActionPreference = 'Stop'
+Invoke-RestMethod -Method 'GET' -Uri $Url -Headers @{ 'x-dsh-fojing-pet' = '1' } -TimeoutSec 5
+'@
+    $ps = [powershell]::Create()
+    $ps.Runspace = $script:WorkRunspace
+    [void]$ps.AddScript($fetchScript)
+    [void]$ps.AddArgument($WorkUrl)
+    $handle = $ps.BeginInvoke()
+    $script:WorkPending = @{ ps = $ps; handle = $handle; at = [DateTime]::Now }
+  } catch {
+    $script:WorkPending = $null
+    $script:WorkFailed = $true
+  }
+}
+
+function Complete-WorkFetch {
+  # 返回 $true 表示这一拍拿到了新数据
+  if (-not $script:WorkPending) { return $false }
+  $pending = $script:WorkPending
+  if (-not $pending.handle.IsCompleted) {
+    # 兜底：runspace 万一卡住，12 秒就丢弃这次请求，绝不能让面板停在「永不刷新」
+    if (([DateTime]::Now - $pending.at).TotalSeconds -gt 12) {
+      $script:WorkPending = $null
+      try { $pending.ps.Stop() } catch { }
+      try { $pending.ps.Dispose() } catch { }
+      $script:WorkFailed = $true
+    }
+    return $false
+  }
+  $script:WorkPending = $null
+  $applied = $false
+  try {
+    $out = $pending.ps.EndInvoke($pending.handle)
+    $payload = $null
+    if ($out -and $out.Count -gt 0) { $payload = $out[0] }
+    if ($payload -and $payload.ok -and $null -ne $payload.sessions) {
+      $script:WorkData = $payload
+      $script:WorkFailed = $false
+      $applied = $true
+    } else {
+      $script:WorkFailed = $true
+    }
+  } catch {
+    $script:WorkFailed = $true
+  } finally {
+    try { $pending.ps.Dispose() } catch { }
+  }
+  return $applied
+}
+
+function Update-Work {
+  $wasFailed = $script:WorkFailed
+  $applied = Complete-WorkFetch
+  if ($applied -or ($script:WorkFailed -ne $wasFailed) -or (-not $script:WorkData)) {
+    Update-PetTag
+    if ($script:ShowingCard -and $script:CardTab -eq 'work') {
+      $sig = Get-WorkSignature
+      if ($sig -ne $script:WorkSignature) {
+        $script:WorkSignature = $sig
+        Render-Work
+        # 数据变少（会话结束 / 收起详单）时窗口也要跟着缩，否则卡片上面会留一大片空白
+        Fit-WindowHeight
+      }
+      if ($script:WorkFailed) { $txtStatus.Text = '读不到功课 · 显示上次的' }
+      else { $txtStatus.Text = '' }
+    }
+  }
+  # 到点就发下一次（上一次没回来就不叠加请求）
+  if (-not $script:WorkPending -and [DateTime]::Now -ge $script:NextWorkAt) {
+    $interval = 15
+    if ($script:ShowingCard) { $interval = 5 }
+    $script:NextWorkAt = [DateTime]::Now.AddSeconds($interval)
+    Start-WorkFetch
+  }
+}
+
+# 数据指纹：只放「肉眼能看出来变化」的字段，token 每 5 秒抖一点不该导致整页重建。
+function Get-WorkSignature {
+  $bits = New-Object System.Collections.Generic.List[string]
+  if (-not $script:WorkData) {
+    if ($script:WorkFailed) { $bits.Add('fail') } else { $bits.Add('nodata') }
+    $bits.Add('open=' + [string]$script:WorkOpenId)
+    return ($bits -join ';')
+  }
+  try {
+    $bits.Add('t=' + [string]$script:WorkData.totalSessions)
+    $bits.Add('r=' + [string]$script:WorkData.runningCount)
+    foreach ($s in @($script:WorkData.sessions)) {
+      if (-not $s) { continue }
+      $line = [string]$s.id
+      $line += '|' + [string][int]([bool]$s.running)
+      $line += '|' + [string]$s.todos.done + '/' + [string]$s.todos.total
+      $line += '|' + [string]$s.tokens.total
+      $mins = 0
+      try { $mins = [Math]::Floor([double]$s.durationMs / 60000) } catch { }
+      $idle = 0
+      try { $idle = [Math]::Floor([double]$s.idleMs / 60000) } catch { }
+      $line += '|' + [string]$mins + '|' + [string]$idle
+      foreach ($c in @($s.children)) {
+        if (-not $c) { continue }
+        $line += '|c' + [string]$c.id + ':' + [string][int]([bool]$c.running) + ':' + [string]$c.tokens.total
+      }
+      $bits.Add($line)
+    }
+  } catch { }
+  $bits.Add('open=' + [string]$script:WorkOpenId)
+  $bits.Add('f=' + [string][int]$script:WorkFailed)
+  return ($bits -join ';')
+}
+
+# --- 功课：立绘下面那个小标签 -------------------------------------------------
+function Update-PetTag {
+  $run = 0
+  try {
+    if ($script:WorkData -and $null -ne $script:WorkData.runningCount) { $run = [int]$script:WorkData.runningCount }
+  } catch { $run = 0 }
+  $dotColor = '#8CB7AF'
+  if ($run -gt 0) {
+    $tagText.Text = "$run 个在跑"
+    $dotColor = '#D2A03C'
+  } else {
+    $petRunning = $false
+    try { if ($script:State) { $petRunning = [bool]$script:State.running } } catch { }
+    if ($petRunning) {
+      $tagText.Text = '翻经中'
+    } else {
+      $left = Get-NextRunLeft
+      if ($left -gt 0) {
+        $tagText.Text = ('{0}:{1:00} 后再读' -f [int][Math]::Floor($left / 60), [int][Math]::Floor($left % 60))
+      } else {
+        $tagText.Text = '静坐中'
+      }
+    }
+  }
+  $tagDot.Fill = New-Brush $dotColor
+}
+
+# --- 功课：tab 与卡片两页 -----------------------------------------------------
+function New-TabChip {
+  param([string]$Label, [string]$Key, [bool]$Active)
+  $chip = New-Object System.Windows.Controls.Border
+  $chip.CornerRadius = New-Object System.Windows.CornerRadius 999
+  $chip.Padding = (New-Thickness '11,3,11,4')
+  $chip.Margin = (New-Thickness '0,0,6,0')
+  $chip.BorderThickness = (New-Thickness '1')
+  $chip.Cursor = 'Hand'
+  $chip.Tag = $Key
+  if ($Active) {
+    $chip.Background = New-Brush '#8CB7AF'
+    $chip.BorderBrush = New-Brush '#8CB7AF'
+  } else {
+    $chip.Background = New-Brush '#FFFDF7'
+    $chip.BorderBrush = New-Brush '#E2D3B6'
+  }
+  $color = '#7A6A4E'
+  if ($Active) { $color = '#FFFDF5' }
+  $chip.Child = (New-Text -Text $Label -Size 11 -Color $color -Weight 'SemiBold')
+  # 和经书胶囊一样用 Preview（隧道）事件：ScrollViewer 会把冒泡事件吃掉
+  $chip.Add_PreviewMouseLeftButtonUp({
+      try {
+        $key = [string]$this.Tag
+        if ($key) { Set-CardTab $key }
+      } catch { }
+    })
+  return $chip
+}
+
+function Update-TabBar {
+  $tabBar.Children.Clear()
+  $tabBar.Children.Add((New-TabChip -Label '今日读经' -Key 'read' -Active ($script:CardTab -eq 'read'))) | Out-Null
+  $tabBar.Children.Add((New-TabChip -Label '功课' -Key 'work' -Active ($script:CardTab -eq 'work'))) | Out-Null
+}
+
+function Set-CardTab {
+  param([string]$Tab = 'read')
+  if ($Tab -ne 'work') { $Tab = 'read' }
+  $script:CardTab = $Tab
+  Update-TabBar
+  if ($Tab -eq 'work') {
+    $readPanel.Visibility = 'Collapsed'
+    $workPanel.Visibility = 'Visible'
+    $btnMore.Visibility = 'Collapsed'
+    $btnNext.Visibility = 'Collapsed'
+    $btnRefresh.Visibility = 'Visible'
+    # 功课页比读经页长：把卡片上限抬高，但必须留在当前屏幕放得下的范围内，
+    # 否则窗口高度被工作区卡住、卡片顶部会被切掉（这个项目以前踩过）。
+    $wa = Get-WindowWorkArea
+    $avail = $wa.Bottom - $wa.Top
+    $limit = [Math]::Min($WorkCardHeight, $avail - $OpenPetHeight - 90)
+    if ($limit -lt 300) { $limit = 300 }
+    $cardBorder.MaxHeight = $limit
+    $script:WorkSignature = Get-WorkSignature
+    Render-Work
+    Request-WorkUpdate
+  } else {
+    $readPanel.Visibility = 'Visible'
+    $workPanel.Visibility = 'Collapsed'
+    $btnMore.Visibility = 'Visible'
+    $btnNext.Visibility = 'Visible'
+    $btnRefresh.Visibility = 'Collapsed'
+    $cardBorder.MaxHeight = $CardHeight
+    Render-Card
+  }
+  $scroll.UpdateLayout()
+  $scroll.ScrollToVerticalOffset(0)
+  Fit-WindowHeight
+}
+
+# --- 功课：行与详单 -----------------------------------------------------------
+function New-WorkDot {
+  param([bool]$Running)
+  $dot = New-Object System.Windows.Shapes.Ellipse
+  $dot.Width = 7
+  $dot.Height = 7
+  $dot.Margin = (New-Thickness '0,0,6,0')
+  $dot.VerticalAlignment = 'Center'
+  if ($Running) {
+    $dot.Fill = New-Brush '#D2A03C'
+    # 金色呼吸：只动不透明度，不占 UI 线程
+    $anim = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $anim.From = 1.0
+    $anim.To = 0.28
+    $anim.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(1100))
+    $anim.AutoReverse = $true
+    $anim.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
+    $dot.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $anim)
+  } else {
+    $dot.Fill = New-Brush '#CFC4AD'
+  }
+  return $dot
+}
+
+function New-StatCell {
+  param([string]$Label, [string]$Value)
+  $cell = New-Object System.Windows.Controls.StackPanel
+  $cell.Margin = New-Object System.Windows.Thickness 0, 0, 6, 7
+  $lab = New-Text -Text $Label -Size 9 -Color '#A89A80' -Margin '0,0,0,1'
+  $val = New-Text -Text $Value -Size 11.5 -Color '#3F574F' -Weight 'SemiBold' -Margin '0,0,0,0'
+  $cell.Children.Add($lab) | Out-Null
+  $cell.Children.Add($val) | Out-Null
+  return $cell
+}
+
+function New-TodoLine {
+  param($Item)
+  $line = New-Object System.Windows.Controls.Grid
+  $line.Margin = New-Object System.Windows.Thickness 0, 2, 0, 0
+  $colPre = New-Object System.Windows.Controls.ColumnDefinition
+  $colPre.Width = [System.Windows.GridLength]::Auto
+  $colTxt = New-Object System.Windows.Controls.ColumnDefinition
+  $colTxt.Width = New-Object System.Windows.GridLength 1, 'Star'
+  [void]$line.ColumnDefinitions.Add($colPre)
+  [void]$line.ColumnDefinitions.Add($colTxt)
+  $status = 'pending'
+  try { if ($Item -and $Item.status) { $status = [string]$Item.status } } catch { }
+  $mark = '○'
+  $color = '#8A8172'
+  if ($status -eq 'completed') { $mark = '✓'; $color = '#A79C86' }
+  elseif ($status -eq 'in_progress') { $mark = '◔'; $color = '#3E6B5E' }
+  # 符号统一交给 Segoe UI Symbol：雅黑里 ○/◔ 的覆盖不稳，容易出豆腐块
+  $pre = New-Text -Text $mark -Size 10.5 -Color $color -Family 'Segoe UI Symbol' -Margin '0,0,4,0'
+  $pre.Width = 14
+  $pre.TextWrapping = 'NoWrap'
+  $pre.TextAlignment = 'Center'
+  $text = New-Text -Text ([string]$Item.content) -Size 10.5 -Color $color -LineHeight 17
+  if ($status -eq 'in_progress') { $text.FontWeight = [System.Windows.FontWeights]::SemiBold }
+  if ($status -eq 'completed') { $text.TextDecorations = [System.Windows.TextDecorations]::Strikethrough }
+  [System.Windows.Controls.Grid]::SetColumn($pre, 0)
+  [System.Windows.Controls.Grid]::SetColumn($text, 1)
+  $line.Children.Add($pre) | Out-Null
+  $line.Children.Add($text) | Out-Null
+  return $line
+}
+
+# 展开后的详单：子任务 + 数字明细 + 子 agent
+function New-WorkDetail {
+  param($Session)
+  $box = New-Object System.Windows.Controls.Border
+  $box.CornerRadius = New-Object System.Windows.CornerRadius 9
+  $box.Background = New-Brush '#FFFCF3'
+  $box.BorderThickness = New-Object System.Windows.Thickness 1
+  $box.BorderBrush = New-Brush '#EDE0C6'
+  $box.Padding = New-Object System.Windows.Thickness 9, 8, 9, 9
+  $box.Margin = New-Object System.Windows.Thickness 0, 7, 0, 1
+  $panel = New-Object System.Windows.Controls.StackPanel
+  $box.Child = $panel
+
+  $lab1 = New-Text -Text '子任务' -Size 9 -Color $Accent -Weight 'Bold' -Margin '0,0,0,4'
+  $panel.Children.Add($lab1) | Out-Null
+  $items = @()
+  try { if ($Session.todos -and $Session.todos.items) { $items = @($Session.todos.items) } } catch { }
+  $hasItems = $false
+  foreach ($it in $items) { if ($it -and $it.content) { $hasItems = $true; break } }
+  if ($hasItems) {
+    foreach ($it in $items) {
+      if (-not $it) { continue }
+      $panel.Children.Add((New-TodoLine -Item $it)) | Out-Null
+    }
+  } else {
+    $panel.Children.Add((New-Text -Text '这个会话没写过子任务' -Size 9.5 -Color '#B3A78F' -Margin '16,1,0,2')) | Out-Null
+  }
+
+  # 数字明细：2×2。卡片只有 400 宽，四个数字摊开比竖着一列好扫。
+  $stats = $null
+  try { $stats = $Session.stats } catch { }
+  $llm = '—'
+  $tool = '—'
+  $turns = '0'
+  if ($stats) {
+    $llm = Format-DurationMs $stats.llmMs
+    $tool = Format-DurationMs $stats.toolMs
+    try { if ($null -ne $stats.turns) { $turns = [string]$stats.turns } } catch { }
+  }
+  $grid = New-Object System.Windows.Controls.Grid
+  $grid.Margin = New-Object System.Windows.Thickness 0, 9, 0, 0
+  $g0 = New-Object System.Windows.Controls.ColumnDefinition
+  $g0.Width = New-Object System.Windows.GridLength 1, 'Star'
+  $g1 = New-Object System.Windows.Controls.ColumnDefinition
+  $g1.Width = New-Object System.Windows.GridLength 1, 'Star'
+  [void]$grid.ColumnDefinitions.Add($g0)
+  [void]$grid.ColumnDefinitions.Add($g1)
+  $gr0 = New-Object System.Windows.Controls.RowDefinition
+  $gr0.Height = [System.Windows.GridLength]::Auto
+  $gr1 = New-Object System.Windows.Controls.RowDefinition
+  $gr1.Height = [System.Windows.GridLength]::Auto
+  [void]$grid.RowDefinitions.Add($gr0)
+  [void]$grid.RowDefinitions.Add($gr1)
+  $cells = @(
+    @{ Row = 0; Col = 0; Block = (New-StatCell -Label 'token 总量' -Value (Format-TokenCount $Session.tokens.total)) },
+    @{ Row = 0; Col = 1; Block = (New-StatCell -Label 'LLM 墙钟' -Value $llm) },
+    @{ Row = 1; Col = 0; Block = (New-StatCell -Label '工具墙钟' -Value $tool) },
+    @{ Row = 1; Col = 1; Block = (New-StatCell -Label '轮次' -Value $turns) }
+  )
+  foreach ($c in $cells) {
+    [System.Windows.Controls.Grid]::SetRow($c.Block, $c.Row)
+    [System.Windows.Controls.Grid]::SetColumn($c.Block, $c.Col)
+    $grid.Children.Add($c.Block) | Out-Null
+  }
+  $panel.Children.Add($grid) | Out-Null
+
+  $kids = @()
+  try { if ($Session.children) { $kids = @($Session.children) } } catch { }
+  $hasKids = $false
+  foreach ($k in $kids) { if ($k) { $hasKids = $true; break } }
+  if ($hasKids) {
+    $panel.Children.Add((New-Text -Text '子 agent' -Size 9 -Color $Accent -Weight 'Bold' -Margin '0,1,0,2')) | Out-Null
+    foreach ($k in $kids) {
+      if (-not $k) { continue }
+      $kLine = New-Object System.Windows.Controls.WrapPanel
+      $kLine.Margin = New-Object System.Windows.Thickness 0, 1, 0, 0
+      $kLine.Children.Add((New-Text -Text '↳' -Size 10 -Color '#B0A38A' -Margin '0,0,5,0')) | Out-Null
+      $kLine.Children.Add((New-Text -Text (Get-ShortName $k) -Size 10 -Color '#5C7168' -Weight 'SemiBold' -Margin '0,0,6,0')) | Out-Null
+      $kLine.Children.Add((New-Text -Text (Format-TokenCount $k.tokens.total) -Size 10 -Color '#8A8172' -Margin '0,0,6,0')) | Out-Null
+      $kr = $false
+      try { $kr = [bool]$k.running } catch { }
+      $kStatus = '已停'
+      $kColor = '#A8A091'
+      if ($kr) { $kStatus = '在跑'; $kColor = '#B98A2E' }
+      $kLine.Children.Add((New-Text -Text $kStatus -Size 10 -Color $kColor)) | Out-Null
+      $panel.Children.Add($kLine) | Out-Null
+    }
+  }
+  return $box
+}
+
+function New-WorkRow {
+  param($Session, [bool]$Open)
+  $row = New-Object System.Windows.Controls.Border
+  $row.CornerRadius = New-Object System.Windows.CornerRadius 10
+  $row.Padding = (New-Thickness '8,7,6,8')
+  $row.Cursor = 'Hand'
+  $row.Tag = [string]$Session.id
+  if ($Open) { $row.Background = New-Brush '#F6EFDE' }
+  else { $row.Background = [System.Windows.Media.Brushes]::Transparent }
+  $body = New-Object System.Windows.Controls.StackPanel
+  $row.Child = $body
+
+  # 第一行：状态点 · 项目名 · 标题（长标题吃省略号）· 展开箭头
+  $line1 = New-Object System.Windows.Controls.Grid
+  $c0 = New-Object System.Windows.Controls.ColumnDefinition
+  $c0.Width = [System.Windows.GridLength]::Auto
+  $c1 = New-Object System.Windows.Controls.ColumnDefinition
+  $c1.Width = [System.Windows.GridLength]::Auto
+  $c2 = New-Object System.Windows.Controls.ColumnDefinition
+  $c2.Width = New-Object System.Windows.GridLength 1, 'Star'
+  $c3 = New-Object System.Windows.Controls.ColumnDefinition
+  $c3.Width = [System.Windows.GridLength]::Auto
+  [void]$line1.ColumnDefinitions.Add($c0)
+  [void]$line1.ColumnDefinitions.Add($c1)
+  [void]$line1.ColumnDefinitions.Add($c2)
+  [void]$line1.ColumnDefinitions.Add($c3)
+
+  $running = $false
+  try { $running = [bool]$Session.running } catch { }
+  $dot = New-WorkDot -Running $running
+
+  $projectText = ''
+  try { if ($Session.project) { $projectText = [string]$Session.project } } catch { }
+  if (-not $projectText) { $projectText = Get-ShortName $Session }
+  $titleText = ''
+  try { if ($Session.title) { $titleText = [string]$Session.title } } catch { }
+  if ($titleText -eq $projectText) { $titleText = '' }
+
+  $proj = New-Text -Text $projectText -Size 11 -Color $Ink -Weight 'Bold' -Margin '0,0,6,0'
+  $proj.MaxWidth = 118
+  $proj.TextWrapping = 'NoWrap'
+  $proj.TextTrimming = 'CharacterEllipsis'
+  $proj.VerticalAlignment = 'Center'
+  $ttl = New-Text -Text $titleText -Size 10.5 -Color '#8A8172' -Margin '0,0,2,0'
+  $ttl.TextWrapping = 'NoWrap'
+  $ttl.TextTrimming = 'CharacterEllipsis'
+  $ttl.VerticalAlignment = 'Center'
+  $caretText = '▸'
+  if ($Open) { $caretText = '▾' }
+  $caret = New-Text -Text $caretText -Size 8.5 -Color '#B0A38A' -Family 'Segoe UI Symbol' -Margin '2,0,0,0'
+  $caret.VerticalAlignment = 'Center'
+
+  [System.Windows.Controls.Grid]::SetColumn($dot, 0)
+  [System.Windows.Controls.Grid]::SetColumn($proj, 1)
+  [System.Windows.Controls.Grid]::SetColumn($ttl, 2)
+  [System.Windows.Controls.Grid]::SetColumn($caret, 3)
+  $line1.Children.Add($dot) | Out-Null
+  $line1.Children.Add($proj) | Out-Null
+  $line1.Children.Add($ttl) | Out-Null
+  $line1.Children.Add($caret) | Out-Null
+  $body.Children.Add($line1) | Out-Null
+
+  # 第二行：进度条 + done/total + token + 时长
+  $total = 0
+  $done = 0
+  try {
+    if ($Session.todos) {
+      if ($null -ne $Session.todos.total) { $total = [int]$Session.todos.total }
+      if ($null -ne $Session.todos.done) { $done = [int]$Session.todos.done }
+    }
+  } catch { }
+  $line2 = New-Object System.Windows.Controls.Grid
+  $line2.Margin = New-Object System.Windows.Thickness 13, 5, 0, 0
+  $d0 = New-Object System.Windows.Controls.ColumnDefinition
+  $d0.Width = [System.Windows.GridLength]::Auto
+  $d1 = New-Object System.Windows.Controls.ColumnDefinition
+  $d1.Width = [System.Windows.GridLength]::Auto
+  $d2 = New-Object System.Windows.Controls.ColumnDefinition
+  $d2.Width = New-Object System.Windows.GridLength 1, 'Star'
+  $d3 = New-Object System.Windows.Controls.ColumnDefinition
+  $d3.Width = [System.Windows.GridLength]::Auto
+  $d4 = New-Object System.Windows.Controls.ColumnDefinition
+  $d4.Width = [System.Windows.GridLength]::Auto
+  [void]$line2.ColumnDefinitions.Add($d0)
+  [void]$line2.ColumnDefinitions.Add($d1)
+  [void]$line2.ColumnDefinitions.Add($d2)
+  [void]$line2.ColumnDefinitions.Add($d3)
+  [void]$line2.ColumnDefinitions.Add($d4)
+
+  if ($total -gt 0) {
+    # 细进度条：只在有 todos 时出现，没有就只留状态点和数字
+    $bar = New-Object System.Windows.Controls.Border
+    $bar.Width = 62
+    $bar.Height = 3.5
+    $bar.CornerRadius = New-Object System.Windows.CornerRadius 2
+    $bar.Background = New-Brush '#E4D9C2'
+    $bar.VerticalAlignment = 'Center'
+    $bar.Margin = New-Object System.Windows.Thickness 0, 0, 7, 0
+    if ($done -gt 0) {
+      $ratio = [double]$done / [double]$total
+      $fill = New-Object System.Windows.Controls.Border
+      $fill.Height = 3.5
+      $fill.CornerRadius = New-Object System.Windows.CornerRadius 2
+      $fill.Background = New-Brush '#7F9A7A'
+      $fill.HorizontalAlignment = 'Left'
+      $fill.Width = [Math]::Max(2, [Math]::Round(62 * $ratio))
+      $bar.Child = $fill
+    }
+    $count = New-Text -Text ("$done/$total") -Size 10 -Color '#8A8172' -Margin '0,0,0,0'
+    $count.VerticalAlignment = 'Center'
+    if ($done -ge $total) { $count.Foreground = New-Brush '#3E6B5E' }
+    [System.Windows.Controls.Grid]::SetColumn($bar, 0)
+    [System.Windows.Controls.Grid]::SetColumn($count, 1)
+    $line2.Children.Add($bar) | Out-Null
+    $line2.Children.Add($count) | Out-Null
+  }
+
+  $tokText = '0'
+  try { $tokText = Format-TokenCount $Session.tokens.total } catch { }
+  $tok = New-Text -Text $tokText -Size 10 -Color '#6E7F79' -Margin '10,0,0,0'
+  $tok.VerticalAlignment = 'Center'
+  # 时长：在跑看「从建会话到现在」，闲着看「上次说话到现在」
+  $durText = '—'
+  try {
+    if ($running) {
+      $durText = Format-DurationMs $Session.durationMs
+    } else {
+      $lastPrompt = 0.0
+      if ($null -ne $Session.lastPromptAt) { $lastPrompt = [double]$Session.lastPromptAt }
+      if ($lastPrompt -gt 0) {
+        $nowMs = 0.0
+        try { if ($script:WorkData -and $null -ne $script:WorkData.now) { $nowMs = [double]$script:WorkData.now } } catch { }
+        if ($nowMs -le 0) { $nowMs = [DateTimeOffset]::Now.ToUnixTimeMilliseconds() }
+        $durText = Format-Ago ($nowMs - $lastPrompt)
+      } else {
+        $durText = Format-DurationMs $Session.durationMs
+      }
+    }
+  } catch { }
+  $dur = New-Text -Text $durText -Size 10 -Color '#9C8B6C' -Margin '8,0,2,0'
+  $dur.VerticalAlignment = 'Center'
+  [System.Windows.Controls.Grid]::SetColumn($tok, 3)
+  [System.Windows.Controls.Grid]::SetColumn($dur, 4)
+  $line2.Children.Add($tok) | Out-Null
+  $line2.Children.Add($dur) | Out-Null
+  $body.Children.Add($line2) | Out-Null
+
+  if ($Open) { $body.Children.Add((New-WorkDetail -Session $Session)) | Out-Null }
+  return $row
+}
+
+function Render-Work {
+  param([switch]$Reveal)
+  $offset = 0.0
+  try { $offset = $scroll.VerticalOffset } catch { }
+  $workList.Children.Clear()
+
+  if (-not $script:WorkData) {
+    $txtWorkMeta.Text = ''
+    $txtWorkNote.Text = ''
+    $hint = '正在读功课…'
+    if ($script:WorkFailed) { $hint = '读不到功课 · 稍后再试' }
+    $empty = New-Text -Text $hint -Size 12 -Color '#A08A68' -Margin '10,16,10,20'
+    $empty.HorizontalAlignment = 'Center'
+    $workList.Children.Add($empty) | Out-Null
+    $scroll.UpdateLayout()
+    $scroll.ScrollToVerticalOffset($offset)
+    return
+  }
+
+  $sessions = @()
+  try { if ($script:WorkData.sessions) { $sessions = @($script:WorkData.sessions) } } catch { }
+  $run = 0
+  try { if ($null -ne $script:WorkData.runningCount) { $run = [int]$script:WorkData.runningCount } } catch { }
+  $total = 0
+  try { if ($null -ne $script:WorkData.totalSessions) { $total = [int]$script:WorkData.totalSessions } } catch { }
+
+  if ($run -gt 0) { $txtWorkMeta.Text = "$run 在跑 · 共 $total 个" }
+  else { $txtWorkMeta.Text = "共 $total 个会话" }
+
+  if ($sessions.Count -eq 0) {
+    # 空状态：不画一张空卡片，就写一句话
+    $empty = New-Text -Text '今日无功课' -Size 16 -Color '#8A8172' -Family 'KaiTi' -Margin '10,18,10,8'
+    $empty.HorizontalAlignment = 'Center'
+    $workList.Children.Add($empty) | Out-Null
+    $idle = New-Text -Text '没有会话在等你，先歇一会儿' -Size 10 -Color '#B3A78F' -Margin '10,0,10,18'
+    $idle.HorizontalAlignment = 'Center'
+    $workList.Children.Add($idle) | Out-Null
+    $txtWorkNote.Text = ''
+    $scroll.UpdateLayout()
+    $scroll.ScrollToVerticalOffset($offset)
+    return
+  }
+
+  # 展开的那一行若已经被挤出列表，就当作没展开，别留一个看不见的展开状态
+  $openId = [string]$script:WorkOpenId
+  if ($openId) {
+    $still = $false
+    foreach ($s in $sessions) { if ($s -and [string]$s.id -eq $openId) { $still = $true; break } }
+    if (-not $still) { $script:WorkOpenId = ''; $openId = '' }
+  }
+
+  $shown = 0
+  foreach ($s in $sessions) {
+    if ($null -eq $s) { continue }
+    if ($shown -ge 6) { break }   # 最多 6 行，再多就成一屏流水账了
+    if ($shown -gt 0) {
+      $div = New-Object System.Windows.Controls.Border
+      $div.Height = 1
+      $div.Background = New-Brush '#F0E6D2'
+      $div.Margin = New-Object System.Windows.Thickness 10, 3, 10, 3
+      $workList.Children.Add($div) | Out-Null
+    }
+    $open = ($openId -ne '' -and [string]$s.id -eq $openId)
+    $row = New-WorkRow -Session $s -Open $open
+    $row.Add_PreviewMouseLeftButtonUp({
+        try {
+          $id = [string]$this.Tag
+          if (-not $id) { return }
+          if ([string]$script:WorkOpenId -eq $id) { $script:WorkOpenId = '' }
+          else { $script:WorkOpenId = $id }
+          Render-Work -Reveal
+          Fit-WindowHeight
+        } catch { }
+      })
+    $workList.Children.Add($row) | Out-Null
+    $shown++
+  }
+
+  $note = ''
+  if ($script:WorkFailed) { $note = '读不到最新功课 · 显示的是上次的' }
+  elseif ($total -gt $shown) { $note = "共 $total 个会话 · 只列最近 $shown 个" }
+  $txtWorkNote.Text = $note
+
+  $scroll.UpdateLayout()
+  $scroll.ScrollToVerticalOffset($offset)
+
+  # 点开一行时把它带进视野：展开的详单在卡片底部时不该要用户自己滚
+  if ($Reveal -and $openId -ne '') {
+    foreach ($child in $workList.Children) {
+      if ($child -is [System.Windows.Controls.Border] -and [string]$child.Tag -eq $openId) {
+        try { $child.BringIntoView() } catch { }
+        break
+      }
+    }
+  }
+}
+
 function Toggle-Card {
   if ($script:ShowingCard) {
     $script:ShowingCard = $false
@@ -687,6 +1487,8 @@ function Toggle-Card {
     Set-CardSize $false
     Update-PetImage
     Fit-WindowHeight
+    # 收起后按 15 秒的节奏拉在跑数；先立刻要一次，别让标签停在旧数字上
+    Request-WorkUpdate
   } else {
     $script:ShowingCard = $true
     $script:ShowingStudy = $false
@@ -696,11 +1498,13 @@ function Toggle-Card {
     Set-Look 400   # 先抬眼「哦，是你」，再低头捧经
     Set-CardSize $true
     Refresh-State | Out-Null
-    Render-Card
+    # 读经页 / 功课页各自重建一次；功课页保留上次展开的那一行
+    Set-CardTab $script:CardTab
     Fit-WindowHeight
     Update-PetImage
+    Request-WorkUpdate
     $shown = Get-PageCard
-    if ($shown -and -not $shown.read) {
+    if ($shown -and -not $shown.read -and $script:CardTab -eq 'read') {
       try { Invoke-PetApi -Method 'POST' -Url $ReadUrl -Body @{ id = $shown.id } | Out-Null } catch { }
     }
   }
@@ -847,6 +1651,10 @@ $btnClose.Add_Click({ Toggle-Card })
 $btnNext.Add_Click({ Invoke-Next })
 $btnOlder.Add_Click({ Step-Page 1 })
 $btnNewer.Add_Click({ Step-Page -1 })
+$btnRefresh.Add_Click({
+    Request-WorkUpdate
+    $txtStatus.Text = '刷新中…'
+  })
 $btnMore.Add_Click({
     $script:ShowExtra = -not $script:ShowExtra
     Render-Card
@@ -908,8 +1716,16 @@ $petImage.ContextMenu = $menu
 # 只负责「睁眼那几秒到期了没」和「未读的间歇抬眼」：一秒一次，图没变就不动。
 $lookTimer = New-Object System.Windows.Threading.DispatcherTimer
 $lookTimer.Interval = [TimeSpan]::FromSeconds(1)
-$lookTimer.Add_Tick({ Update-PetImage })
+$lookTimer.Add_Tick({ Update-PetImage; Update-PetTag })
 $lookTimer.Start()
+
+# --- 功课节拍 ---------------------------------------------------------------
+# 每 600ms 看一眼后台请求回来了没；到点（卡片开着 5s / 收着 15s）就发下一次。
+# 这一拍只做「检查 + 应用 + 重建」，网络在 runspace 里，UI 线程不会卡。
+$workTimer = New-Object System.Windows.Threading.DispatcherTimer
+$workTimer.Interval = [TimeSpan]::FromMilliseconds(600)
+$workTimer.Add_Tick({ try { Update-Work } catch { } })
+$workTimer.Start()
 
 # --- 轮询 -------------------------------------------------------------------
 $timer = New-Object System.Windows.Threading.DispatcherTimer
@@ -927,8 +1743,29 @@ $window.Add_Loaded({
     # 落到「鼠标所在那块屏」的右下角：用户刚点完按钮，光标就在他眼前那块屏上。
     Reset-PetPosition
     Set-PetImage 'idle'
+    Update-TabBar
     Refresh-State | Out-Null
+    Update-PetTag
+    Request-WorkUpdate
     Send-Heartbeat
+  })
+
+# 退出时把后台 runspace / 飞行中的请求收掉，别留一个孤儿线程
+$window.Add_Closed({
+    try {
+      if ($script:WorkPending) {
+        $script:WorkPending.ps.Stop()
+        $script:WorkPending.ps.Dispose()
+        $script:WorkPending = $null
+      }
+    } catch { }
+    try {
+      if ($script:WorkRunspace) {
+        $script:WorkRunspace.Close()
+        $script:WorkRunspace.Dispose()
+        $script:WorkRunspace = $null
+      }
+    } catch { }
   })
 
 # 最后一道保险：单个交互出错时把错误显示在状态行，别让整个桌宠退出。

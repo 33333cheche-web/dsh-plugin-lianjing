@@ -254,6 +254,14 @@ check('在跑才有佛光', clientJs.includes('fj-halo') && clientJs.includes('w
 check('开工收工各抬眼一次', /before === 0 && workRunning > 0/.test(clientJs) && /before > 0 && workRunning === 0/.test(clientJs));
 check('看功课时她只陪着，不盯屏幕', clientJs.includes("if (view === 'work' && open) return sprites.idle"));
 check('功课页勤拉，其余时候慢拉', clientJs.includes('5000 : 12000'));
+// 桌面壳读同一份 JSON：一个宿主实现，两个壳都只负责画
+check('壳也读同一份功课', shellSource.includes('/dsh-fojing-pet/work.json'));
+check('壳的功课页也有 tab', shellSource.includes('Set-CardTab') && shellSource.includes('New-TabChip'));
+check('壳里点行也能展开', shellSource.includes('Render-Work') && shellSource.includes('New-WorkDetail'));
+check('壳里子任务也是三态', shellSource.includes("'◔'") && shellSource.includes("'○'"));
+check('壳拉功课不阻塞界面', shellSource.includes('Start-WorkFetch') && shellSource.includes('Complete-WorkFetch'));
+check('数据变少窗口会缩', /function Update-Work[\s\S]{0,900}Fit-WindowHeight/.test(shellSource));
+check('壳的小标签会报在跑数', shellSource.includes('Update-PetTag') && shellSource.includes('个在跑'));
 
 console.log('');
 if (failures) {
