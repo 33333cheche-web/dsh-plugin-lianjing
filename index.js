@@ -681,7 +681,7 @@ export function apply(ctx, config) {
   ctx.inject?.(['agents'], (scope) => { agentRegistry = scope.agents; });
 
   const WORK = {
-    roots: 8,        // 面板最多列几个会话（界面按项目归成树，多留两个给同一项目下的活儿）
+    roots: 32,       // 先留足根会话：项目按 cwd 归树，不能因前面几个会话把后面的项目截掉
     children: 3,     // 每个项目最多带几个子 agent
     todos: 12,       // 每个项目最多带几条子任务
     ttl: 2500,       // 整份快照的缓存时长（客户端约 5s 拉一次）
@@ -792,8 +792,17 @@ export function apply(ctx, config) {
         roots.push(record);
       }
     }
+    // 不要只按 listSessions 的原始顺序截前几个：列表顺序不保证把最新/正在跑的项目放前面，
+    // 否则后面的活动项目会被前面的历史会话挡掉。先把有运行中根会话或子 agent 的项目提到前面。
+    const priorityRoots = roots.filter((root) => {
+      const id = String(root?.header?.id || '');
+      return isRunning(id) || (kids.get(id) || []).some((child) => isRunning(String(child?.header?.id || '')));
+    });
+    const selectedRoots = priorityRoots.concat(
+      roots.filter((root) => !priorityRoots.includes(root)).slice(0, Math.max(0, WORK.roots - priorityRoots.length)),
+    );
     const sessions = [];
-    for (const root of roots.slice(0, WORK.roots)) {
+    for (const root of selectedRoots) {
       const item = await workItem(root, now);
       const bucket = kids.get(item.id) || [];
       const children = [];

@@ -330,6 +330,7 @@ check('清单给她自己的形象当图标', pluginJson.icon === './icon.png' &
 check('清单图标随包发布', pluginJson.files.includes('icon.png'));
 check('简介说的是桌宠不是学经工具', pluginJson.description.includes('桌宠') && pluginJson.description.includes('agent'));
 check('功课每行带 session id 好跳转', hostSource.includes('short: id.replace'));
+check('功课根会话不只取前三个项目', hostSource.includes('roots: 32') && hostSource.includes('priorityRoots'));
 // 2026-11-04 回归：detached 起来壳会「启动即退出」，界面看着像点了没反应
 check('拉起悬浮壳不用 detached', hostSource.includes('windowsHide: true') && !hostSource.includes('detached: true'));
 check('壳起不来要报错不要装没事', hostSource.includes('启动后立刻退出'));
