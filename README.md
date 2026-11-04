@@ -83,7 +83,7 @@ dsh plugin --profile desktop add "D:\tools\dsh-plugin-lianjing-2.0.0.tgz"
 **方式二：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
 
 ```powershell
-git clone https://github.com/wocheng/dsh-plugin-lianjing.git
+git clone https://github.com/33333cheche-web/dsh-plugin-lianjing.git
 dsh plugin --profile desktop add "link:D:\path\to\dsh-plugin-lianjing"
 ```
 

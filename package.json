@@ -26,11 +26,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wocheng/dsh-plugin-lianjing.git"
+    "url": "git+https://github.com/33333cheche-web/dsh-plugin-lianjing.git"
   },
-  "homepage": "https://github.com/wocheng/dsh-plugin-lianjing#readme",
+  "homepage": "https://github.com/33333cheche-web/dsh-plugin-lianjing#readme",
   "bugs": {
-    "url": "https://github.com/wocheng/dsh-plugin-lianjing/issues"
+    "url": "https://github.com/33333cheche-web/dsh-plugin-lianjing/issues"
   },
   "exports": {
     ".": "./index.js",
