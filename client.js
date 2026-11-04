@@ -111,27 +111,19 @@ window.__ModuleLoader__.load({
       .fj-empty{margin:0 0 10px;color:#7a8f88;font-size:12.5px}
       .fj-warn{margin:8px 0 0;font-size:10px;color:#c07d6f}
       /* ---- 灵感光点：不写数字，只呼吸；有未读亮一点，没有也留着（入口不能藏） ---- */
-      .fj-spark{position:absolute;z-index:4;top:44px;right:44px;width:15px;height:15px;padding:0;margin:0;border:0;background:none;
+      /* 一颗软光点：没有描边、没有外圈，只靠明暗呼吸让人注意到 */
+      .fj-spark{position:absolute;z-index:4;top:46px;right:46px;width:12px;height:12px;padding:0;margin:0;border:0;background:none;
         transform:scale(var(--fj-inv,1));transform-origin:center;line-height:0;cursor:pointer;-webkit-appearance:none;appearance:none}
-      .fj-spark i{position:relative;display:block;width:15px;height:15px;border-radius:50%;
-        background:radial-gradient(circle at 34% 30%,#fffef9 0%,#ffeec4 26%,#eebd68 60%,#c08a2e 100%);
-        border:1px solid rgba(255,250,235,.8);
-        box-shadow:0 0 0 1px rgba(176,124,40,.45),0 1px 2px rgba(120,90,40,.28),0 0 7px 2px rgba(232,190,104,.45);
+      .fj-spark i{position:relative;display:block;width:12px;height:12px;border-radius:50%;
+        background:radial-gradient(circle at 36% 32%,#fffef8 0%,#ffeec0 30%,#eebb64 66%,rgba(198,154,78,.55) 100%);
+        box-shadow:0 0 6px 1px rgba(232,190,104,.42);
         animation:fj-spark-breathe 2.2s ease-in-out infinite}
-      /* 一圈慢慢荡开的光晕：一眼就知道这儿能点 */
-      .fj-spark::before{content:"";position:absolute;left:50%;top:50%;width:15px;height:15px;margin:-7.5px 0 0 -7.5px;border-radius:50%;
-        border:1px solid rgba(214,166,74,.7);opacity:0;pointer-events:none;animation:fj-spark-ring 2.2s ease-out infinite}
-      .fj-spark[data-lit="off"] i{opacity:.6;filter:saturate(.55);animation-duration:2.4s}
-      .fj-spark[data-lit="off"]::before{border-color:rgba(214,166,74,.4);animation-duration:2.4s}
-      .fj-spark:hover i{animation-duration:1.4s}
+      .fj-spark[data-lit="off"] i{opacity:.58;filter:saturate(.55);animation-duration:2.4s}
+      .fj-spark:hover i{animation-duration:1.4s;box-shadow:0 0 8px 2px rgba(232,190,104,.62)}
       .fj-spark:focus-visible{outline:2px solid #a9c8bf;outline-offset:3px;border-radius:50%}
       @keyframes fj-spark-breathe{
-        0%,100%{transform:scale(.93);box-shadow:0 0 0 1px rgba(176,124,40,.4),0 0 4px 1px rgba(232,190,104,.35),0 0 10px 3px rgba(226,176,84,.14)}
-        50%{transform:scale(1.05);box-shadow:0 0 0 1px rgba(200,146,54,.55),0 0 8px 3px rgba(236,198,116,.75),0 0 20px 8px rgba(226,176,84,.34)}}
-      @keyframes fj-spark-ring{
-        0%{transform:scale(.85);opacity:0}
-        30%{opacity:.55}
-        100%{transform:scale(1.8);opacity:0}}
+        0%,100%{transform:scale(.93);box-shadow:0 0 5px 1px rgba(232,190,104,.30),0 0 11px 3px rgba(226,176,84,.12)}
+        50%{transform:scale(1.06);box-shadow:0 0 7px 2px rgba(236,198,116,.58),0 0 16px 6px rgba(226,176,84,.26)}}
       /* ---- 逐句学习 ---- */
       .fj-progress{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:10px;color:#a08a68}
       .fj-bar{flex:1;height:4px;border-radius:2px;background:#eadcc2;overflow:hidden}

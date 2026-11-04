@@ -812,19 +812,19 @@ $petHost.Children.Add($floatLayer) | Out-Null
 
 # 右上角「灵感」光点：不再写数字，改成一团会呼吸的淡金光；点它 = 展开/收起卡片。
 $badge = New-Object System.Windows.Controls.Grid
-$badge.Width = 30
-$badge.Height = 30
+$badge.Width = 24
+$badge.Height = 24
 $badge.HorizontalAlignment = 'Right'
 $badge.VerticalAlignment = 'Top'
 # 往内收一截：离上边 16、离右边 10（原来是 6/6，贴角显得占地）
-$badge.Margin = New-Object System.Windows.Thickness 0, 16, 10, 0
+$badge.Margin = New-Object System.Windows.Thickness 0, 19, 13, 0
 $badge.Background = [System.Windows.Media.Brushes]::Transparent
 $badge.Cursor = [System.Windows.Input.Cursors]::Hand
 
 # 光晕：径向渐变 + 透明度/直径呼吸（约 2.2 秒一个来回）
 $badgeGlow = New-Object System.Windows.Shapes.Ellipse
-$badgeGlow.Width = 34
-$badgeGlow.Height = 34
+$badgeGlow.Width = 26
+$badgeGlow.Height = 26
 $badgeGlow.HorizontalAlignment = 'Center'
 $badgeGlow.VerticalAlignment = 'Center'
 $badgeGlow.RenderTransformOrigin = New-Object System.Windows.Point 0.5, 0.5
@@ -837,16 +837,17 @@ $badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop 
 $badgeGlow.Fill = $badgeGlowBrush
 $badge.Children.Add($badgeGlow) | Out-Null
 
-# 芯：14 DIP 暖白到淡金的小圆点，不带数字
+# 芯：11 DIP 暖白到淡金的小圆点，不带数字；最外圈淡到全透明，不留描边那圈硬边
 $badgeCore = New-Object System.Windows.Shapes.Ellipse
-$badgeCore.Width = 14
-$badgeCore.Height = 14
+$badgeCore.Width = 11
+$badgeCore.Height = 11
 $badgeCore.HorizontalAlignment = 'Center'
 $badgeCore.VerticalAlignment = 'Center'
 $badgeCoreBrush = New-Object System.Windows.Media.RadialGradientBrush
 $badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFFFFCF2'), 0.0)))
-$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFF7E4B8'), 0.62)))
-$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFE7C887'), 1.0)))
+$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFF7E4B8'), 0.5)))
+$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#70EFD08E'), 0.8)))
+$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#00E7C887'), 1.0)))
 $badgeCore.Fill = $badgeCoreBrush
 $badge.Children.Add($badgeCore) | Out-Null
 $petHost.Children.Add($badge) | Out-Null
