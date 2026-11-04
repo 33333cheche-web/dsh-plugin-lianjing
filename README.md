@@ -230,9 +230,9 @@ LLM 4 小时 38 分    工具 1 小时 45 分
 | `2 分钟前` | `lastPromptAt` 距今 | 最后一次有动静是多久以前 |
 | 子任务 | `todos` 投影 | agent 用 `todo_write` 自己维护的计划，没写过就没有 |
 
-**佛光**：有会话在跑时，立绘背后转一圈缓慢的金色光；开工和收工各睁一次眼，跑的过程中一直闭眼——她是陪着，不是盯着你。角标和底部小标签也会变成「N 个在跑」。
+**佛光**：有会话在跑时，立绘背后转一圈缓慢的金色柔光（网页端和桌面壳用同一张 `assets/halo.png`，网页端再糊 7px 让边化开，不画硬边细环）；开工和收工各睁一次眼，跑的过程中一直闭眼——她是陪着，不是盯着你。角标和底部小标签也会变成「N 个在跑」。
 
-网页端是 CSS 的 `conic-gradient` + 径向遮罩（`.fj-halo`，9 秒一圈、有活时 5.5 秒）；桌面壳是 WPF，同样的效果烘成一张 `assets/halo.png`（512×512，环带在半径 55%~83%），用 `RotateTransform` + `DoubleAnimation` 转、`Running` 时淡入、闲时淡出后 `Collapsed`。两边比例一致：直径 = 立绘高度 × 206/196，圆心在立绘顶部往下 53% 处。
+两端用的是同一张 `assets/halo.png`（512×512，环带在半径 55%~83%，alpha 最高 140），网页端 `background-image` 铺上去再 `blur(7px)` 糊开、`rotate` 转 5.5 秒一圈；桌面壳是 WPF，用 `RotateTransform` + `DoubleAnimation` 转、`Running` 时淡入、闲时淡出后 `Collapsed`。兜底：宿主没给 `sprites.halo` 时网页端退回原来那版 `conic-gradient` 细环，不会开天窗。两边比例一致：直径 = 立绘高度 × 206/196，圆心在立绘顶部往下 53% 处。
 
 **数据怎么来的**：全部由宿主侧一次折叠好，挂在 `/dsh-fojing-pet/work.json`，网页和桌面壳读同一份 JSON（都不去解析几百 MB 的会话日志）：
 
@@ -311,7 +311,7 @@ node 佛经学习\_tools\build-pumen.mjs
 ## 验证
 
 ```powershell
-# 离线纯函数 + 语料 + 客户端 + patch + 壳脚本 + 清单，共 197 项断言
+# 离线纯函数 + 语料 + 客户端 + patch + 壳脚本 + 清单，共 201 项断言
 node verify\smoke.mjs
 ```
 

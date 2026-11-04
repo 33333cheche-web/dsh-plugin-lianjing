@@ -72,6 +72,9 @@ const SPRITES = {
   knock: 'pet-knock.png',
 };
 
+// 佛光：网页端和桌面壳共用同一张素材，两边看起来才是一回事
+const HALO_FILE = 'halo.png';
+
 const PET_NAME = '莲鲸';
 const SKILL_NAME = 'fojing-vademecum';
 const DAY = 86400000;
@@ -582,7 +585,11 @@ export function apply(ctx, config) {
       },
       pet: {
         name: PET_NAME,
-        sprites: Object.fromEntries(Object.keys(SPRITES).map((key) => [key, `${ROUTES.asset}?name=${key}`])),
+        sprites: {
+          ...Object.fromEntries(Object.keys(SPRITES).map((key) => [key, `${ROUTES.asset}?name=${key}`])),
+          // 佛光和桌面壳共用一张图：网页端那版 conic 细环太硬，换成同一张软光
+          halo: `${ROUTES.asset}?name=halo`,
+        },
         sound: ROUTES.sound,
       },
       merits: { ...state.merits },
@@ -885,6 +892,18 @@ export function apply(ctx, config) {
     asset: async (request) => {
       let sprite = 'idle';
       try { sprite = new URL(request.url, 'http://127.0.0.1').searchParams.get('name') || 'idle'; } catch { /* 默认 */ }
+      // 佛光：只认 halo.png，缺了就是缺了——绝不能回落到立绘，否则背后会多出一个小人
+      if (sprite === 'halo') {
+        try {
+          const [bytes, info] = await Promise.all([readFile(join(assetsDir, HALO_FILE)), stat(join(assetsDir, HALO_FILE))]);
+          if (!info.size) throw new FojingPetError('空文件');
+          return new Response(bytes, {
+            headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=3600' },
+          });
+        } catch {
+          return text(`缺少素材：assets/${HALO_FILE}`, 404);
+        }
+      }
       // 可选立绘（比如 knock）没随包时安静地退回 idle：宁可少一张，不能让画面空掉
       const candidates = [...new Set([SPRITES[sprite] || SPRITES.idle, SPRITES.idle])];
       for (const file of candidates) {

@@ -317,6 +317,10 @@ check('有活才淡出来、闲时收起', shellSource.includes('Set-HaloRunning
 check('佛光是慢慢转的', shellSource.includes('RotateTransform') && shellSource.includes('RepeatBehavior'));
 check('佛光不挡敲木鱼', /Halo[\s\S]{0,600}?IsHitTestVisible = \$false/.test(shellSource));
 check('素材缺了也能起壳', /Halo[\s\S]{0,900}?catch \{/.test(shellSource));
+check('网页端发的 halo 地址指向素材路由', hostSource.includes("halo: `${ROUTES.asset}?name=halo`"));
+check('halo 缺素材宁可 404 也不回落成立绘', /sprite === 'halo'[\s\S]{0,600}?缺少素材/.test(hostSource));
+check('网页端用同一张佛光素材', clientSource.includes("sprites?.halo") && clientSource.includes('backgroundImage'));
+check('网页端那圈太硬的细环糊成柔光', /data-img="on"\]\{[\s\S]{0,300}?filter:blur\(7px\)/.test(clientSource));
 console.log('清单与启动');
 const pluginJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 check('清单给她自己的形象当图标', pluginJson.icon === './icon.png' && (await readFile(join(root, 'icon.png'))).length > 1024);

@@ -116,14 +116,14 @@ window.__ModuleLoader__.load({
         transform:scale(var(--fj-inv,1));transform-origin:center;line-height:0;cursor:pointer;-webkit-appearance:none;appearance:none}
       .fj-spark i{position:relative;display:block;width:12px;height:12px;border-radius:50%;
         background:radial-gradient(circle at 36% 32%,#fffef8 0%,#ffeec0 30%,#eebb64 66%,rgba(198,154,78,.55) 100%);
-        box-shadow:0 0 6px 1px rgba(232,190,104,.42);
+        box-shadow:0 0 10px 3px rgba(232,190,104,.55),0 0 22px 9px rgba(226,176,84,.22);
         animation:fj-spark-breathe 2.2s ease-in-out infinite}
       .fj-spark[data-lit="off"] i{opacity:.58;filter:saturate(.55);animation-duration:2.4s}
-      .fj-spark:hover i{animation-duration:1.4s;box-shadow:0 0 8px 2px rgba(232,190,104,.62)}
+      .fj-spark:hover i{animation-duration:1.4s;box-shadow:0 0 12px 4px rgba(232,190,104,.7),0 0 26px 11px rgba(226,176,84,.28)}
       .fj-spark:focus-visible{outline:2px solid #a9c8bf;outline-offset:3px;border-radius:50%}
       @keyframes fj-spark-breathe{
-        0%,100%{transform:scale(.93);box-shadow:0 0 5px 1px rgba(232,190,104,.30),0 0 11px 3px rgba(226,176,84,.12)}
-        50%{transform:scale(1.06);box-shadow:0 0 7px 2px rgba(236,198,116,.58),0 0 16px 6px rgba(226,176,84,.26)}}
+        0%,100%{transform:scale(.95);box-shadow:0 0 8px 2px rgba(232,190,104,.42),0 0 18px 7px rgba(226,176,84,.16)}
+        50%{transform:scale(1.04);box-shadow:0 0 12px 4px rgba(236,198,116,.66),0 0 26px 12px rgba(226,176,84,.30)}}
       /* ---- 逐句学习 ---- */
       .fj-progress{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:10px;color:#a08a68}
       .fj-bar{flex:1;height:4px;border-radius:2px;background:#eadcc2;overflow:hidden}
@@ -195,6 +195,11 @@ window.__ModuleLoader__.load({
         animation:fj-halo-spin 9s linear infinite;opacity:.92}
       .fj-halo[data-state="busy"]{animation-duration:5.5s;opacity:1}
       .fj-halo[data-state="done"]{background:conic-gradient(from 0deg,rgba(150,178,140,0) 0deg,rgba(150,178,140,.45) 80deg,rgba(150,178,140,0) 190deg,rgba(150,178,140,.32) 300deg,rgba(150,178,140,0) 360deg)}
+      /* 有素材时直接用和桌面壳同一张 halo.png，再糊一层：要的是柔光，不是一圈硬边的细环 */
+      .fj-halo[data-img="on"]{background:transparent;mask:none;-webkit-mask:none;
+        background-size:100% 100%;background-repeat:no-repeat;background-position:center;
+        filter:blur(7px)}
+      .fj-halo[data-img="on"][data-state="done"]{filter:blur(7px) hue-rotate(-38deg)}
       @keyframes fj-halo-spin{to{transform:rotate(360deg)}}
       .fj-img{position:relative;z-index:1}
       /* ---- 敲木鱼：点她中间，飘一句彩头 ---- */
@@ -1415,7 +1420,13 @@ window.__ModuleLoader__.load({
             'aria-label': `莲鲸，${unread ? `${unread} 条未读经文` : '没有新经文'}，点中间敲木鱼，点四周看功课`,
           },
           h('div', { className: 'fj-fit' },
-            workRunning > 0 ? h('i', { className: 'fj-halo', 'data-state': 'busy', 'aria-hidden': true }) : null,
+            workRunning > 0 ? h('i', {
+              className: 'fj-halo',
+              'data-state': 'busy',
+              'data-img': data?.pet?.sprites?.halo ? 'on' : 'off',
+              style: data?.pet?.sprites?.halo ? { backgroundImage: `url("${data.pet.sprites.halo}")` } : undefined,
+              'aria-hidden': true,
+            }) : null,
             sprite()
               ? h('img', {
                 className: 'fj-img',

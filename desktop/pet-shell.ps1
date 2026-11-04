@@ -823,8 +823,8 @@ $badge.Cursor = [System.Windows.Input.Cursors]::Hand
 
 # 光晕：径向渐变 + 透明度/直径呼吸（约 2.2 秒一个来回）
 $badgeGlow = New-Object System.Windows.Shapes.Ellipse
-$badgeGlow.Width = 26
-$badgeGlow.Height = 26
+$badgeGlow.Width = 32
+$badgeGlow.Height = 32
 $badgeGlow.HorizontalAlignment = 'Center'
 $badgeGlow.VerticalAlignment = 'Center'
 $badgeGlow.RenderTransformOrigin = New-Object System.Windows.Point 0.5, 0.5
@@ -832,7 +832,7 @@ $badgeGlowScale = New-Object System.Windows.Media.ScaleTransform 1.0, 1.0
 $badgeGlow.RenderTransform = $badgeGlowScale
 $badgeGlowBrush = New-Object System.Windows.Media.RadialGradientBrush
 $badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#AFF6E0A8'), 0.0)))
-$badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#4AEFD08E'), 0.45)))
+$badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#5AEFD08E'), 0.45)))
 $badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#00F2D79B'), 1.0)))
 $badgeGlow.Fill = $badgeGlowBrush
 $badge.Children.Add($badgeGlow) | Out-Null
