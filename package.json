@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-fojing-pet",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "莲鲸 · DSH 桌面桌宠：右下角一只在莲台上打坐的鲸鱼娘，帮你看住所有 agent——功课面板列出正在跑的会话、子任务进度、token 消耗和跑了多久，点一下能跳回对应对话；附送佛经逐句读、联网取经、点她敲木鱼攒彩头。网页浮层和 Windows 桌面悬浮壳两套，尺寸三档可缩。",
   "icon": "./icon.png",
   "keywords": [
