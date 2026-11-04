@@ -174,7 +174,9 @@ export function validateSutra(doc) {
     if (seen.has(no)) errors.push(`经 ${doc.id} 的段落 ${no} 重复`);
     seen.add(no);
     if (typeof seg?.text !== 'string' || !seg.text.trim()) errors.push(`经 ${doc.id} 段落 ${no} 缺 text`);
-    if (typeof seg?.gist !== 'string' || !seg.gist.trim()) errors.push(`经 ${doc.id} 段落 ${no} 缺释义`);
+    // 联网取回的原文草稿没有释义：gist 允许留空，别拿机器生成的句子冒充释义。
+    if (typeof seg?.gist !== 'string') errors.push(`经 ${doc.id} 段落 ${no} 的 gist 不是字符串`);
+    else if (!seg.gist.trim() && !doc?.draft) errors.push(`经 ${doc.id} 段落 ${no} 缺释义`);
     if (!Array.isArray(seg?.terms)) errors.push(`经 ${doc.id} 段落 ${no} 的 terms 不是数组`);
   }
   return errors;

@@ -62,7 +62,7 @@ for (const file of manifest.sutras) {
   sutras.push(doc);
 }
 const segments = flattenSegments(sutras);
-// 联网取回的草稿只有原文，释义/名相/练习本来就是空的，作者写的几部才要求齐全
+// 联网取回的草稿只有原文，释义/名相/练习本来就该留空，作者写的几部才要求齐全
 const authored = flattenSegments(sutras.filter((doc) => !doc.draft));
 const drafts = flattenSegments(sutras.filter((doc) => doc.draft));
 check('总句数不少于 60', segments.length >= 60, `实际 ${segments.length} 句`);
@@ -70,8 +70,7 @@ check('每句都有原文', segments.every((s) => typeof s.text === 'string' && 
 check('每句都有释义', authored.every((s) => typeof s.gist === 'string' && s.gist.trim().length > 0));
 check('每句都有练习', authored.every((s) => typeof s.practice === 'string' && s.practice.trim().length > 0));
 check('每句至少一个名相', authored.every((s) => Array.isArray(s.terms) && s.terms.length > 0 && s.terms.every((t) => t.word && t.gloss)));
-check('草稿句也有释义占位', drafts.every((s) => s.gist.trim().length > 0));
-check('草稿句不冒充讲解', drafts.every((s) => s.gist.includes('草稿')));
+check('草稿不编释义（留空待补）', drafts.every((s) => s.gist === '' && s.practice === '' && s.terms.length === 0));
 check('每部经句序从 1 连续', sutras.every((doc) => doc.segments.every((s, i) => Number(s.no) === i + 1)));
 check('原文不含空白换行', segments.every((s) => !/\s/.test(s.text)));
 check('语言是中文', segments.every((s) => /[\u4e00-\u9fa5]/.test(s.text)));
@@ -198,9 +197,25 @@ check('草稿标记 draft', draft.doc.draft === true);
 check('草稿带来源链接', draft.doc.sourceUrl === 'https://fojing.com/demo/');
 check('草稿去掉页面尾巴', !JSON.stringify(draft.doc.segments).includes('Really Simple')
   && !JSON.stringify(draft.doc.segments).includes('Scroll Up'));
-check('草稿每段都有释义占位', draft.doc.segments.every((seg) => seg.gist.length > 0));
+check('草稿不编释义（留空待补）', draft.doc.segments.every((seg) => seg.gist === ''));
 check('草稿段落不碎（阿弥陀经量级）', draft.doc.segments.length < 40);
 check('草稿能过语料校验', validateSutra(draft.doc).length === 0);
+
+// 有「第X章」的经按章切：一章一段，标题进 label，不能把下一章标题留在上一章末尾
+const chapterLines = [
+  '佛言。辭親出家。識心達本。解無為法。名曰沙門。',
+  '第二章‧斷欲絕求',
+  '佛言。出家沙門者。斷欲去愛。識自心源。達佛深理。',
+  '第三章‧割愛去貪',
+  '佛言。剃除鬚髮。而為沙門。受道法者。去世資財。',
+];
+const byChapter = buildDraft({ id: 'demo2', title: '示例章经', unit: '章', url: 'https://fojing.com/demo2/', source: '示例' }, chapterLines);
+check('按章切：一章一段', byChapter.doc.segments.length === 3, `实际 ${byChapter.doc.segments.length} 段`);
+check('按章切：单位是章', byChapter.doc.unit === '章');
+check('按章切：标题进 label', byChapter.doc.segments[1].label === '斷欲絕求');
+check('按章切：正文不含下一章标题', !byChapter.doc.segments[0].text.includes('斷欲絕求')
+  && !byChapter.doc.segments[1].text.includes('割愛去貪'));
+check('按章切：开篇那段也有正文', byChapter.doc.segments[0].text.length > 10);
 
 const fromUrl = entryFromUrl('https://fojing.com/%e9%87%91%e5%88%9a%e7%bb%8f/');
 check('自定义链接能解析', Boolean(fromUrl));

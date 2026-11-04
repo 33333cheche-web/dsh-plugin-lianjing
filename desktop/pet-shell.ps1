@@ -1139,7 +1139,9 @@ function Render-Card {
     $pickerPanel.Children.Add($chip) | Out-Null
   }
   $txtCite.Text = $card.cite.text
-  $txtPlain.Text = $card.gist
+  # 联网取回的原文草稿没有释义：写一句说明，别让「释义」栏空着
+  if ($card.gist) { $txtPlain.Text = $card.gist }
+  else { $txtPlain.Text = '原文草稿 · 释义、名相、练习还没补，先读原文' }
   $txtPractice.Text = $card.practice
   # 名相逐条重建
   $termsPanel.Children.Clear()
@@ -1165,7 +1167,8 @@ function Render-Card {
       $termsPanel.Visibility = 'Visible'
     }
     $noteBorder.Visibility = 'Visible'
-    $txtLabel2.Visibility = 'Visible'
+    # 草稿没有练习，就别留一个空的「今日练习」标题
+    if ($card.practice) { $txtLabel2.Visibility = 'Visible' }
   }
   # 换卡后回到顶部：ScrollViewer 会保留上一次的偏移。
   $scroll.UpdateLayout()
@@ -2674,15 +2677,17 @@ function Get-Catalog {
 }
 
 function Invoke-Import {
-  param([string]$CatalogId = '')
-  if (-not $CatalogId) { return }
+  param([string]$CatalogId = '', [string]$Url = '')
+  if (-not $CatalogId -and -not $Url) { return }
   if ($script:Busy) { return }
   $script:Busy = $true
   try {
     $txtStatus.Text = '联网取经中…'
     # 抓网页要几秒，先把「取经中」这几个字画出来，不然界面像卡死
     $window.Dispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::Background)
-    $result = Invoke-PetApi -Method 'POST' -Url $ImportUrl -Body @{ catalogId = $CatalogId }
+    $body = @{}
+    if ($Url) { $body['url'] = $Url } else { $body['catalogId'] = $CatalogId }
+    $result = Invoke-PetApi -Method 'POST' -Url $ImportUrl -Body $body
     Refresh-State | Out-Null
     Render-Card
     Update-PetImage
@@ -2696,7 +2701,81 @@ function Invoke-Import {
   }
 }
 
-# --- 交互 -------------------------------------------------------------------
+
+# 贴链接取经：经目里没有的经，直接把 fojing.com 的正文页地址贴进来。
+# 用独立小窗，不挤卡片；确定后仍走同一个导入接口，只是把 catalogId 换成 url。
+function Show-FetchUrlDialog {
+  if ($script:Busy) { return }
+  $dlg = New-Object System.Windows.Window
+  $dlg.Title = '取经 · 贴链接'
+  $dlg.Width = 470
+  $dlg.Height = 214
+  $dlg.ResizeMode = 'NoResize'
+  $dlg.WindowStartupLocation = 'CenterScreen'
+  $dlg.Background = New-Brush '#FBF6EA'
+  $dlg.ShowInTaskbar = $false
+
+  $panel = New-Object System.Windows.Controls.StackPanel
+  $panel.Margin = (New-Thickness '18,16,18,14')
+
+  $panel.Children.Add((New-Text -Text '取经（联网）· 贴链接' -Size 13 -Color $Ink -Weight 'Bold' -Margin '0,0,0,6')) | Out-Null
+  $panel.Children.Add((New-Text -Text '支持 fojing.com 的经文页。只取正文，存成原文草稿——释义、名相、练习留空待补。' -Size 10.5 -Color $Muted)) | Out-Null
+
+  $box = New-Object System.Windows.Controls.TextBox
+  $box.Text = 'https://fojing.com/'
+  $box.FontSize = 12
+  $box.Padding = (New-Thickness '8,6,8,6')
+  $box.Margin = (New-Thickness '0,10,0,0')
+  $box.BorderBrush = New-Brush '#DCCBA8'
+  $box.Background = New-Brush '#FFFDF6'
+  $box.Foreground = New-Brush $Ink
+  $box.CaretBrush = New-Brush $Ink
+  $panel.Children.Add($box) | Out-Null
+
+  $row = New-Object System.Windows.Controls.StackPanel
+  $row.Orientation = 'Horizontal'
+  $row.HorizontalAlignment = 'Right'
+  $row.Margin = (New-Thickness '0,14,0,0')
+
+  $btnCancel = New-Object System.Windows.Controls.Button
+  $btnCancel.Content = '取消'
+  $btnCancel.Padding = (New-Thickness '14,5,14,5')
+  $btnCancel.Margin = (New-Thickness '0,0,8,0')
+  $btnCancel.Background = New-Brush '#F1E8D4'
+  $btnCancel.Foreground = New-Brush '#8A7A5C'
+  $btnCancel.BorderBrush = New-Brush '#E0D2B4'
+  $btnCancel.Cursor = [System.Windows.Input.Cursors]::Hand
+  $btnCancel.Add_Click({ $dlg.Close() })
+
+  $btnGo = New-Object System.Windows.Controls.Button
+  $btnGo.Content = '取回'
+  $btnGo.Padding = (New-Thickness '14,5,14,5')
+  $btnGo.Background = New-Brush '#8CB7AF'
+  $btnGo.Foreground = New-Brush '#FFFDF5'
+  $btnGo.BorderBrush = New-Brush '#8CB7AF'
+  $btnGo.FontWeight = 'Bold'
+  $btnGo.Cursor = [System.Windows.Input.Cursors]::Hand
+  $btnGo.Add_Click({
+      $link = ([string]$box.Text).Trim()
+      $dlg.Close()
+      if ($link) { Invoke-Import -Url $link }
+    })
+
+  $row.Children.Add($btnCancel) | Out-Null
+  $row.Children.Add($btnGo) | Out-Null
+  $panel.Children.Add($row) | Out-Null
+
+  $dlg.Content = $panel
+  $dlg.Add_ContentRendered({ try { [void]$box.Focus(); $box.SelectAll() } catch { } })
+  $box.Add_KeyDown({
+      if ($_.Key -eq [System.Windows.Input.Key]::Enter) {
+        $link = ([string]$box.Text).Trim()
+        $dlg.Close()
+        if ($link) { Invoke-Import -Url $link }
+      }
+    })
+  [void]$dlg.ShowDialog()
+}# --- 交互 -------------------------------------------------------------------
 # 用 WPF 原生 DragMove：它自己处理 DPI，不会像手算像素差那样越拖越偏。
 # DragMove 会阻塞到松手，所以用「位置有没有变」来区分拖动和单击。
 function Move-PetTo {
@@ -2848,9 +2927,14 @@ $miFetch.Add_SubmenuOpened({
       }
     } catch { }
   })
+# 经目里没有的经：直接把 fojing.com 的正文页地址贴进来
+$miFetchUrl = New-Object System.Windows.Controls.MenuItem
+$miFetchUrl.Header = '取经（贴链接）…'
+$miFetchUrl.Add_Click({ Show-FetchUrlDialog })
 $menu.Items.Add($miReset) | Out-Null
 $menu.Items.Add($miHide) | Out-Null
 $menu.Items.Add($miFetch) | Out-Null
+$menu.Items.Add($miFetchUrl) | Out-Null
 $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 $menu.Items.Add($miQuit) | Out-Null
 $petImage.ContextMenu = $menu

@@ -153,6 +153,8 @@ window.__ModuleLoader__.load({
       .fj-chip:focus-visible{outline:2px solid #a9c8bf;outline-offset:2px}
       .fj-intro{margin:0 0 10px;font-size:12px;line-height:1.7;color:#7d8f88;white-space:pre-wrap}
       .fj-cite-label{margin:-8px 0 12px;font-size:10px;letter-spacing:.06em;color:#a8926c}
+      /* 联网取回的原文草稿：没有释义，用一行灰字说明，不留空段落 */
+      .fj-draft-note{margin:10px 0 2px;padding-left:9px;border-left:2px solid #e6dcc6;font-size:10.5px;line-height:1.7;color:#a89b82}
       .fj-item-label{display:block;margin-bottom:1px;font-family:"Microsoft YaHei",sans-serif;font-size:9.5px;font-style:normal;font-weight:700;letter-spacing:.08em;color:#a8926c}
       .fj-terms{margin:2px 0 9px;padding:0}
       .fj-terms dt{margin:6px 0 1px;font-size:11.5px;font-weight:800;color:#5d7d72;letter-spacing:.02em}
@@ -1036,10 +1038,13 @@ window.__ModuleLoader__.load({
                   seg.text)),
                 seg.no === studyNo
                   ? h('div', { className: 'fj-detail' },
-                    h('p', { className: 'fj-label' }, '释义'),
-                    h('p', null, seg.gist),
-                    termList(seg.terms, 'terms'),
-                    seg.practice ? h('p', { className: 'fj-seg-practice' }, '今日练习：' + seg.practice) : null)
+                    seg.gist
+                      ? h(React.Fragment, null,
+                        h('p', { className: 'fj-label' }, '释义'),
+                        h('p', null, seg.gist),
+                        termList(seg.terms, 'terms'),
+                        seg.practice ? h('p', { className: 'fj-seg-practice' }, '今日练习：' + seg.practice) : null)
+                      : h('p', { className: 'fj-draft-note' }, '原文草稿 · 释义待补'))
                   : null))),
             active && active.label
               ? h('p', { className: 'fj-src' }, `本句出处：${sutra.fullTitle} · 第 ${active.no} ${sutra.unit || '句'} · ${active.label}`)
@@ -1325,7 +1330,8 @@ window.__ModuleLoader__.load({
                 h('p', { className: 'fj-label' }, '释义'),
                 h('p', null, current.gist),
                 termList(current.terms, 'card-terms'))
-              : null,
+              // 联网取回的原文草稿没有释义：说清楚是草稿，别拿空段落糊过去
+              : h('p', { className: 'fj-draft-note' }, '原文草稿 · 释义、名相、练习还没补，先读原文'),
             current.practice
               ? h(React.Fragment, null,
                 h('p', { className: 'fj-label' }, '今日练习'),

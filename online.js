@@ -37,17 +37,17 @@ export const IMPORT_CATALOG = [
     hint: '四十二段短文，汉地最早的汉译佛经之一；此页为繁体原文。',
   },
   {
-    id: 'ba-da-ren-jue-jing',
-    title: '八大人觉经',
-    fullTitle: '佛说八大人觉经',
-    translator: '后汉 安世高 译',
-    category: '经集部',
-    source: '大正藏 T17 No.779',
+    id: 'fo-ding-zun-sheng-jing',
+    title: '佛顶尊胜陀罗尼经',
+    fullTitle: '佛顶尊胜陀罗尼经',
+    translator: '唐 三藏法师 佛陀波利 译',
+    category: '密教部',
+    source: '大正藏 T19 No.967',
     unit: '段',
-    url: 'https://fojing.com/%e4%bd%9b%e8%af%b4%e5%85%ab%e5%a4%a7%e4%ba%ba%e8%a7%89%e7%bb%8f/',
-    start: '为佛弟子',
-    end: ['作礼而去', '信受奉行', '皆大欢喜'],
-    hint: '八条修行纲要，常被列为日诵。',
+    url: 'https://fojing.com/%e4%bd%9b%e9%a1%b6%e5%b0%8a%e8%83%9c%e9%99%80%e7%bd%97%e5%b0%bc%e7%bb%8f/',
+    start: '如是我闻',
+    end: ['皆大欢喜', '作礼而去', '信受奉行'],
+    hint: '密教部短经，一卷；原经目里的八大人觉经在站上没有正文页（404），换成这部能取到的。',
   },
   {
     id: 'jin-gang-jing',
@@ -93,7 +93,6 @@ export const IMPORT_CATALOG = [
 const UA = 'Mozilla/5.0 (compatible; dsh-plugin-lianjing)';
 
 /** 草稿句的释义占位：说清是草稿，不冒充讲解。 */
-const DRAFT_GIST = '这一句是联网取回的原文草稿，逐句释义还没整理。可以先自己读原文，意思不确定的地方记下来。';
 
 /** 只允许取 fojing.com 的页面：避免这个功能变成任意 URL 抓取器。 */
 export function isAllowedUrl(url) {
@@ -181,6 +180,65 @@ export function cleanTitle(raw, fallback) {
     .trim() || fallback || '';
 }
 
+/**
+ * 章标题行：`第二章‧斷欲絕求`、`第 2 章 断欲绝求`、`第十二章`。
+ * 这类经（四十二章经、地藏经…）网页上是「一行标题 + 若干行正文」，
+ * 盲切会把人读的章切碎，标题还落在上一段的尾巴上。
+ */
+const CHAPTER_HEAD = /^第\s*([0-9一二三四五六七八九十百零〇]{1,4})\s*章[\s‧·・:：.、,，\-–—]*(.*)$/;
+
+/**
+ * 按「第X章」切段：标题进 label，正文进 text；切不出两章就返回 null，交给盲切。
+ * 一章就是一段——跟书上对得上；只有超长（>600 字）才按句号再分，后续段标「（续）」。
+ */
+export function splitByChapters(lines) {
+  const list = Array.isArray(lines) ? lines : [];
+  const heads = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const match = CHAPTER_HEAD.exec(String(list[i]).trim());
+    if (match) heads.push({ index: i, raw: String(list[i]).trim(), label: (match[2] || '').trim() });
+  }
+  if (heads.length < 2) return null;
+  const segments = [];
+  const push = (label, text) => {
+    // 汉文经不用空格：网页行间的换行/缩进并进来时一起消掉，免得卡片里出现空隙
+    const body = String(text || '').replace(/\s+/g, '').trim();
+    if (body.length < 4) return;
+    const pieces = body.length > 600 ? splitParagraph(body, 600) : [body];
+    pieces.forEach((piece, index) => {
+      segments.push({ label: index === 0 ? label : `${label}（续）`, text: piece });
+    });
+  };
+  const preamble = list.slice(0, heads[0].index).join('').trim();
+  // 开篇那段通常是第一章的正文（网页把「第一章」标题切在起点之前了）。
+  // 编号交给段号显示，label 留空，免得卡片上出现「第 1 章 · 第一章」这种重复。
+  if (preamble.length >= 8) push('', preamble);
+  heads.forEach((head, i) => {
+    const next = i + 1 < heads.length ? heads[i + 1].index : list.length;
+    push(head.label || head.raw, list.slice(head.index + 1, next).join(''));
+  });
+  return segments.length >= 2 ? segments : null;
+}
+
+/** 没有章标题时：网页常一句一行，先并成 ~90 字段落，再按句号切成 170 字以内。 */
+function blindChunks(lines) {
+  const merged = [];
+  let buffer = '';
+  for (const line of lines) {
+    buffer += line;
+    if (buffer.length >= 90) { merged.push(buffer); buffer = ''; }
+  }
+  if (buffer) merged.push(buffer);
+  const out = [];
+  for (const paragraph of merged) {
+    for (const piece of splitParagraph(paragraph, 170)) {
+      const text = piece.trim();
+      if (text.length >= 4) out.push({ label: '', text });
+    }
+  }
+  return out;
+}
+
 /** 取心正文 → 草稿语料。只放原文，释义/名相/练习留空，等人工补。 */
 export function buildDraft(entry, lines) {
   // 1. 去掉页面尾巴（版权/主题/插件署名）和过短的行
@@ -188,22 +246,9 @@ export function buildDraft(entry, lines) {
     .map((line) => String(line).replace(/\s+/g, ' ').trim())
     .filter((line) => line.length >= 4 && !JUNK_LINE.test(line));
   if (!cleaned.length) return { ok: false, error: '切出来是空的，页面结构可能变了' };
-  // 2. 网页常把一句一行地排，先并成段落，再按句号切，避免碎成上百段
-  const merged = [];
-  let buffer = '';
-  for (const line of cleaned) {
-    buffer += line;
-    if (buffer.length >= 90) { merged.push(buffer); buffer = ''; }
-  }
-  if (buffer) merged.push(buffer);
-  // 3. 每段控制在 170 字以内，读起来是一张卡片的量
-  const texts = [];
-  for (const paragraph of merged) {
-    for (const piece of splitParagraph(paragraph, 170)) {
-      const text = piece.trim();
-      if (text.length >= 4) texts.push(text);
-    }
-  }
+  // 2. 有「第X章」标题的经按章切；没有就退回按长度盲切
+  const byChapter = splitByChapters(cleaned);
+  const texts = byChapter || blindChunks(cleaned);
   if (!texts.length) return { ok: false, error: '切出来是空的，页面结构可能变了' };
   const id = entry.id;
   const doc = {
@@ -214,15 +259,15 @@ export function buildDraft(entry, lines) {
     category: entry.category || '',
     source: entry.source || '',
     intro: entry.intro || `联网取回的原文草稿（${entry.source || '来源页'}）。逐句释义、名相与练习还没补，先只读原文。`,
-    unit: entry.unit || '句',
+    unit: byChapter ? (entry.unit || '章') : (entry.unit || '句'),
     draft: true,
     sourceUrl: entry.url,
     fetchedAt: new Date().toISOString(),
-    segments: texts.map((text, index) => ({
+    segments: texts.map((item, index) => ({
       no: index + 1,
-      label: '',
-      text,
-      gist: DRAFT_GIST,
+      label: item.label || '',
+      text: item.text,
+      gist: '',
       terms: [],
       practice: '',
     })),
