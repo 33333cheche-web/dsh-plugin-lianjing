@@ -26,6 +26,7 @@ $ImportUrl  = "$Origin/dsh-fojing-pet/import"
 $BeatUrl   = "$Origin/dsh-fojing-pet/heartbeat"
 $CatalogUrl = "$Origin/dsh-fojing-pet/catalog.json"
 $WorkUrl  = "$Origin/dsh-fojing-pet/work.json"
+$OpenUrl   = "$Origin/dsh-fojing-pet/open"
 # 敲木鱼：一次彩头 + 一段随包音效（启动时下到临时目录，之后不再联网取）
 $MuyuUrl   = "$Origin/dsh-fojing-pet/muyu"
 $MuyuWavUrl = "$Origin/dsh-fojing-pet/muyu.wav"
@@ -1175,6 +1176,8 @@ function Complete-WorkFetch {
 
 function Update-Work {
   $wasFailed = $script:WorkFailed
+  # 「在 DSH 里打开这个对话」的结果回填（runspace 收尾 + 提示到期）
+  Update-OpenSession
   $applied = Complete-WorkFetch
   if ($applied -or ($script:WorkFailed -ne $wasFailed) -or (-not $script:WorkData)) {
     Update-PetTag
@@ -1208,6 +1211,12 @@ $script:KnockRunspace = $null
 $script:KnockSound = $null      # SoundPlayer，启动时下好 19KB 的 wav 预加载
 $script:KnockCount = 0          # 服务端返回的累计敲击数
 $script:KnockFloats = New-Object System.Collections.ArrayList
+# 「在 DSH 里打开这个对话」：和敲木鱼一样丢后台 runspace，UI 线程只负责收结果。
+$script:OpenPending = $null
+$script:OpenRunspace = $null
+$script:OpenNote = $null        # @{ id; text; until }：展开行底部那句浅色小字
+$script:OpenNoteEl = $null      # 当前挂在界面上的那个 TextBlock
+$script:OpenNoteElId = ''       # 那个 TextBlock 属于哪个会话
 
 $script:WavPending = $null
 $script:WavRunspace = $null
@@ -1530,6 +1539,109 @@ function Invoke-MuyuKnock {
   if (-not $script:KnockPending) { Start-KnockFetch }
 }
 
+# --- 在 DSH 里打开对话 ---------------------------------------------------------
+# 壳是独立进程，够不到网页的客户端服务，所以走「宿主接力」：壳 POST /dsh-fojing-pet/open，
+# 网页每 2.5 秒拉一次快照，看到新请求就 uiWorkspace.openSession(id)。
+# 行自己用 PreviewMouseLeftButtonUp 做展开/收起（隧道事件先到行），所以点按钮时得先认出
+# 「这一下落没落在按钮里」，否则会顺手把行收起来。
+function Test-HitInsideButton {
+  param($Source, $StopAt)
+  $node = $Source
+  $guard = 0
+  while ($node -and $guard -lt 32) {
+    $guard++
+    if ($node -is [System.Windows.Controls.Button]) { return $true }
+    if ($node -eq $StopAt) { return $false }
+    if ($node -is [System.Windows.Media.Visual]) { $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node) }
+    elseif ($node -is [System.Windows.FrameworkContentElement]) { $node = $node.Parent }
+    else { return $false }
+  }
+  return $false
+}
+
+function Set-OpenNote {
+  param([string]$Id, [string]$Text)
+  # 成功/失败都留 4 秒；期间数据刷新重建了行，也能从 $script:OpenNote 补回来
+  $script:OpenNote = @{ id = $Id; text = $Text; until = [DateTime]::Now.AddSeconds(4) }
+  try {
+    if ($script:OpenNoteEl -and [string]$script:OpenNoteElId -eq $Id) { $script:OpenNoteEl.Text = $Text }
+  } catch { }
+}
+
+function Start-OpenSession {
+  param([string]$Id)
+  if (-not $Id) { return }
+  if ($script:OpenPending) { return }   # 连点挡住，不叠 runspace
+  try {
+    if ($script:OpenNoteEl -and [string]$script:OpenNoteElId -eq $Id) { $script:OpenNoteEl.Text = '在交给 DSH…' }
+  } catch { }
+  try {
+    $rsState = ''
+    if ($script:OpenRunspace) { $rsState = [string]$script:OpenRunspace.RunspaceStateInfo.State }
+    if ($rsState -ne 'Opened') {
+      try { if ($script:OpenRunspace) { $script:OpenRunspace.Dispose() } } catch { }
+      $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+      $rs = [runspacefactory]::CreateRunspace($iss)
+      $rs.Open()
+      $script:OpenRunspace = $rs
+    }
+    # 防跨站守卫要求：x-dsh-fojing-pet 头 + application/json + 一个 json body
+    $openScript = @'
+param([string]$Url, [string]$Id)
+$ErrorActionPreference = 'Stop'
+$body = @{ id = $Id } | ConvertTo-Json -Compress
+Invoke-RestMethod -Method 'POST' -Uri $Url -Headers @{ 'x-dsh-fojing-pet' = '1' } -ContentType 'application/json' -Body $body -TimeoutSec 5
+'@
+    $ps = [powershell]::Create()
+    $ps.Runspace = $script:OpenRunspace
+    [void]$ps.AddScript($openScript)
+    [void]$ps.AddArgument($OpenUrl)
+    [void]$ps.AddArgument($Id)
+    $handle = $ps.BeginInvoke()
+    $script:OpenPending = @{ ps = $ps; handle = $handle; at = [DateTime]::Now; id = $Id }
+  } catch {
+    # 连请求都发不出去：照实说，不要静默
+    $script:OpenPending = $null
+    Set-OpenNote -Id $Id -Text 'DSH 那边没接上'
+  }
+}
+
+function Update-OpenSession {
+  # 每 600ms 一拍（从 Update-Work 里叫）：收 POST 结果、清到期提示
+  if ($script:OpenPending) {
+    $pending = $script:OpenPending
+    if (-not $pending.handle.IsCompleted) {
+      if (([DateTime]::Now - $pending.at).TotalSeconds -gt 8) {
+        $script:OpenPending = $null
+        try { $pending.ps.Stop() } catch { }
+        try { $pending.ps.Dispose() } catch { }
+        Set-OpenNote -Id $pending.id -Text 'DSH 那边没接上'
+      }
+    } else {
+      $script:OpenPending = $null
+      $ok = $false
+      try {
+        $out = $pending.ps.EndInvoke($pending.handle)
+        if ($out -and $out.Count -gt 0 -and $out[0] -and $out[0].ok) { $ok = $true }
+      } catch {
+        $ok = $false
+      } finally {
+        try { $pending.ps.Dispose() } catch { }
+      }
+      if ($ok) { Set-OpenNote -Id $pending.id -Text '已交给 DSH 打开' }
+      else { Set-OpenNote -Id $pending.id -Text 'DSH 那边没接上' }
+    }
+  }
+  try {
+    if ($script:OpenNote -and $script:OpenNote.until -ne [DateTime]::MinValue) {
+      if ([DateTime]::Now -ge $script:OpenNote.until) {
+        $script:OpenNote = $null
+        if ($script:OpenNoteEl) { $script:OpenNoteEl.Text = '' }
+      }
+    }
+  } catch { }
+}
+
 # 数据指纹：只放「肉眼能看出来变化」的字段，token 每 5 秒抖一点不该导致整页重建。
 function Get-WorkSignature {
   $bits = New-Object System.Collections.Generic.List[string]
@@ -1826,6 +1938,38 @@ function New-WorkDetail {
       $panel.Children.Add($kLine) | Out-Null
     }
   }
+  # 最后一行：把这一行对应的会话交给 DSH 打开。纯文字按钮，不用胶囊。
+  $openId = [string]$Session.id
+  if ($openId) {
+    $openRow = New-Object System.Windows.Controls.StackPanel
+    $openRow.Orientation = 'Horizontal'
+    $openRow.Margin = New-Object System.Windows.Thickness 0, 9, 0, 0
+    $btnOpen = New-LinkButton -Label '在 DSH 里打开这个对话 →' -Color '#3E6B5E' -Size 10
+    $btnOpen.Margin = New-Object System.Windows.Thickness 2, 0, 0, 0
+    $btnOpen.Padding = New-Object System.Windows.Thickness 4, 1, 4, 1
+    $btnOpen.Tag = $openId
+    $btnOpen.ToolTip = '在 DSH 窗口里切到这个对话'
+    $openNote = New-Text -Text '' -Size 9 -Color '#7F9A7A' -Margin '8,0,0,0'
+    $openNote.VerticalAlignment = 'Center'
+    $btnOpen.Add_Click({
+        try {
+          $id = [string]$this.Tag
+          if ($id) { Start-OpenSession -Id $id }
+        } catch { }
+      })
+    $openRow.Children.Add($btnOpen) | Out-Null
+    $openRow.Children.Add($openNote) | Out-Null
+    $panel.Children.Add($openRow) | Out-Null
+    # 同一时间只挂一个提示位：展开另一行时旧的自动作废
+    $script:OpenNoteEl = $openNote
+    $script:OpenNoteElId = $openId
+    try {
+      if ($script:OpenNote -and [string]$script:OpenNote.id -eq $openId -and [DateTime]::Now -lt $script:OpenNote.until) {
+        $openNote.Text = [string]$script:OpenNote.text
+      }
+    } catch { }
+  }
+
   return $box
 }
 
@@ -2046,6 +2190,8 @@ function Render-Work {
     $row = New-WorkRow -Session $s -Open $open
     $row.Add_PreviewMouseLeftButtonUp({
         try {
+          # 行里的小按钮（「在 DSH 里打开」）自己处理点击，别把行顺手收起来
+          if (Test-HitInsideButton -Source $_.OriginalSource -StopAt $this) { return }
           $id = [string]$this.Tag
           if (-not $id) { return }
           if ([string]$script:WorkOpenId -eq $id) { $script:WorkOpenId = '' }
@@ -2417,6 +2563,20 @@ $window.Add_Closed({
         $script:WavRunspace.Close()
         $script:WavRunspace.Dispose()
         $script:WavRunspace = $null
+      }
+    } catch { }
+
+    # 「在 DSH 里打开」的飞行中请求 / runspace 也一起收掉，别留孤儿线程
+    try {
+      if ($script:OpenPending) {
+        $script:OpenPending.ps.Stop()
+        $script:OpenPending.ps.Dispose()
+        $script:OpenPending = $null
+      }
+      if ($script:OpenRunspace) {
+        $script:OpenRunspace.Close()
+        $script:OpenRunspace.Dispose()
+        $script:OpenRunspace = $null
       }
     } catch { }
     try { if ($script:KnockSound) { $script:KnockSound.Dispose(); $script:KnockSound = $null } } catch { }

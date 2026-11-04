@@ -420,6 +420,7 @@ window.__ModuleLoader__.load({
       const audioWarm = useRef(false);
       const muted = useRef(readMuted());
       const knockSlot = useRef(0);   // 连敲时的位置槽：第一下正中
+      const seenOpen = useRef(0);    // 桌面壳请求「打开某个会话」的 at，处理过的就不再理
       const cardEl = useRef(null);
       const petEl = useRef(null);
       const drag = useRef(null);
@@ -601,6 +602,15 @@ window.__ModuleLoader__.load({
           setData(next);
           setShell(shellState);
           setError(null);
+          // 桌面壳点了「在 DSH 里打开这个对话」：壳够不到 uiWorkspace，
+          // 只能靠这条本地轮询把请求接力过来（at 是宿主的毫秒时间戳，去重靠它）。
+          const pending = next?.pendingOpen;
+          if (pending?.id && pending?.at && pending.at !== seenOpen.current) {
+            seenOpen.current = pending.at;
+            const relayed = openHostSession(hostCtx, pending.id);
+            if (relayed.ok) console.info('[莲鲸·壳] 接力打开会话', pending.id);
+            else console.info('[莲鲸·壳] 接力失败', pending.id, relayed.message);
+          }
           return next;
         } catch (failure) {
           setError(String(failure?.message || failure));
@@ -614,7 +624,8 @@ window.__ModuleLoader__.load({
         const loop = async () => {
           if (cancelled) return;
           if (!document.hidden) await refresh();
-          handle = window.setTimeout(loop, running ? 4000 : POLL_MS);
+          // 桌面壳开着的时候勤一点：壳里点功课行要靠这一拍把「打开某个会话」接力过来
+          handle = window.setTimeout(loop, running ? 4000 : shellUp ? 2500 : POLL_MS);
         };
         void loop();
         const onVisible = () => { if (!document.hidden) void refresh(); };
@@ -624,7 +635,7 @@ window.__ModuleLoader__.load({
           if (handle) window.clearTimeout(handle);
           document.removeEventListener('visibilitychange', onVisible);
         };
-      }, [refresh, running]);
+      }, [refresh, running, shellUp]);
 
       useEffect(() => {
         if (!open) return undefined;

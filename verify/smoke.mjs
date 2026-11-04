@@ -298,6 +298,12 @@ check('彩头是咖金纯字、不留底板', clientJs.includes('color:#c69a4e')
 check('壳里的彩头也只剩字', shellSource.includes('#C69A4E') && shellSource.includes('Inlines.Add($runAmount)'));
 check('壳里的小元件也不是橄榄', !shellSource.includes('CornerRadius 999') && shellSource.includes('CornerRadius 6'));
 
+console.log('壳里点行跳对话');
+check('宿主留了接力路由', hostSource.includes("open: '/dsh-fojing-pet/open'"));
+check('接力收 id 但要挡住不像话的', hostSource.includes('会话 id 不像话') && hostSource.includes('pendingOpen'));
+check('快照把请求带给界面', hostSource.includes('pendingOpen: state.pendingOpen'));
+check('界面那侧真的去切会话', clientSource.includes('pendingOpen') && clientSource.includes('seenOpen'));
+check('壳里开着时轮询更快好接力', clientSource.includes('shellUp ? 2500'));
 console.log('清单与启动');
 const pluginJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 check('清单给她自己的形象当图标', pluginJson.icon === './icon.png' && (await readFile(join(root, 'icon.png'))).length > 1024);

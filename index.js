@@ -52,6 +52,7 @@ export const SHELL_ROUTES = {
   work: '/dsh-fojing-pet/work.json',
   sound: '/dsh-fojing-pet/muyu.wav',
   muyu: '/dsh-fojing-pet/muyu',
+  open: '/dsh-fojing-pet/open',
 };
 
 /** 敲木鱼的时候随机认领一条彩头：都是玩笑，别当真，也别当真事上报。 */
@@ -265,6 +266,9 @@ export function apply(ctx, config) {
     // 敲木鱼攒的彩头：纯粹是玩，重启不丢就行
     merits: Object.fromEntries(MERIT_KINDS.map((item) => [item.key, 0])),
     muyuCount: 0,
+    // 桌宠里点了「在 DSH 里打开这个对话」：壳够不到客户端的 uiWorkspace，
+    // 就把请求记在这，界面那侧下一拍拉快照时看到新的 at 就真去切会话。
+    pendingOpen: null,
   };
   let saveChain = Promise.resolve();
   let pendingTimer = null;
@@ -583,6 +587,8 @@ export function apply(ctx, config) {
       },
       merits: { ...state.merits },
       muyuCount: state.muyuCount,
+      // 界面侧看到 at 变了就去切会话（见 client.js 的 pendingOpen 处理）
+      pendingOpen: state.pendingOpen,
     };
   };
 
@@ -936,6 +942,16 @@ export function apply(ctx, config) {
       await ready;
       return json({ ok: true, importing, items: catalogState() });
     },
+    // 桌面壳够不到客户端的 uiWorkspace：只把「我要去哪个会话」记在快照里，
+    // 网页那侧下一拍看到新的 at 就真的切过去。
+    open: async (request) => {
+      if (request.method !== 'POST') return json({ ok: false, error: '只收 POST' }, 405);
+      const body = await readBody(request);
+      const id = String(body?.id || '');
+      if (!/^session-[A-Za-z0-9._-]{1,120}$/.test(id)) return json({ ok: false, error: '会话 id 不像话' }, 400);
+      state.pendingOpen = { id, at: Date.now() };
+      return json({ ok: true, id, at: state.pendingOpen.at, waited: Boolean(shellStatus().running) });
+    },
     work: async () => {
       await ready;
       try {
@@ -1179,6 +1195,7 @@ export function apply(ctx, config) {
         register(SHELL_ROUTES.work, ['GET'], () => handlers.work()),
         register(SHELL_ROUTES.sound, ['GET'], () => handlers.sound()),
         register(SHELL_ROUTES.muyu, ['POST'], (request) => handlers.muyu(request)),
+        register(SHELL_ROUTES.open, ['POST'], (request) => handlers.open(request)),
       ];
       webCtx.effect(() => () => {
         for (const dispose of disposers) {
