@@ -1,5 +1,5 @@
 /**
- * Web half of `dsh-plugin-fojing-pet`.
+ * Web half of `dsh-plugin-lianjing`.
  *
  * 在 Harness 的 shell overlay 里渲染「莲鲸」：右下角一只打坐的鲸鱼娘。
  * 点开是"浅杏古书"卡片——一句经文原文、一段现代小注、一个当天能做的练习；
@@ -8,32 +8,32 @@
  * 所有内容来自宿主路由，客户端不做内容生成，也不把现代解释伪装成经文原句。
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-plugin-fojing-pet',
+  id: 'dsh-plugin-lianjing',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
     const { useState, useEffect, useLayoutEffect, useRef, useCallback } = React;
 
     const API = {
-      state: '/api/dsh-fojing-pet.state',
-      next: '/api/dsh-fojing-pet.next',
-      read: '/api/dsh-fojing-pet.read',
-      sutra: '/api/dsh-fojing-pet.sutra',
-      segmentRead: '/api/dsh-fojing-pet.segment-read',
-      shell: '/api/dsh-fojing-pet.shell',
-      catalog: '/api/dsh-fojing-pet.catalog',
-      import: '/api/dsh-fojing-pet.import',
-      work: '/api/dsh-fojing-pet.work',
+      state: '/api/dsh-lianjing.state',
+      next: '/api/dsh-lianjing.next',
+      read: '/api/dsh-lianjing.read',
+      sutra: '/api/dsh-lianjing.sutra',
+      segmentRead: '/api/dsh-lianjing.segment-read',
+      shell: '/api/dsh-lianjing.shell',
+      catalog: '/api/dsh-lianjing.catalog',
+      import: '/api/dsh-lianjing.import',
+      work: '/api/dsh-lianjing.work',
       // 这两条之前漏了：new Audio(undefined) / POST undefined，木鱼一直没声
-      sound: '/api/dsh-fojing-pet.sound',
-      muyu: '/api/dsh-fojing-pet.muyu',
+      sound: '/api/dsh-lianjing.sound',
+      muyu: '/api/dsh-lianjing.muyu',
     };
     const POLL_MS = 20000;
-    const POS_KEY = 'dsh-fojing-pet.pos';
+    const POS_KEY = 'dsh-lianjing.pos';
     const PET_H = 196;
     // 三档尺寸：只缩立绘（含飘字），卡片与状态条不动——字得照样读得清。
-    const SIZE_KEY = 'dsh-fojing-pet.size';
-    const MUTE_KEY = 'dsh-fojing-pet.muted';
+    const SIZE_KEY = 'dsh-lianjing.size';
+    const MUTE_KEY = 'dsh-lianjing.muted';
     const SIZES = [
       { id: 'lg', label: '大', scale: 1 },
       { id: 'md', label: '中', scale: 0.8 },
@@ -41,8 +41,8 @@ window.__ModuleLoader__.load({
     ];
 
     const CSS = `
-      [data-fojing-pet]{position:fixed;z-index:86;width:220px;font-family:"Microsoft YaHei",Inter,ui-sans-serif,system-ui,"PingFang SC",sans-serif;color:#33555a;font-size:13px;line-height:1.65}
-      [data-fojing-pet] *{box-sizing:border-box}
+      [data-lianjing]{position:fixed;z-index:86;width:220px;font-family:"Microsoft YaHei",Inter,ui-sans-serif,system-ui,"PingFang SC",sans-serif;color:#33555a;font-size:13px;line-height:1.65}
+      [data-lianjing] *{box-sizing:border-box}
       .fj-anchor{position:relative;display:flex;flex-direction:column;align-items:center;width:100%}
       .fj-pet{position:relative;z-index:1;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;width:100%;cursor:grab;user-select:none;transition:transform .3s cubic-bezier(.22,.61,.36,1)}
       .fj-pet:active{cursor:grabbing}
@@ -291,7 +291,7 @@ window.__ModuleLoader__.load({
       @keyframes fj-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.006)}}
       @keyframes fj-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
       @media (prefers-reduced-motion: reduce){
-        [data-fojing-pet] *{animation:none!important;transition:none!important}
+        [data-lianjing] *{animation:none!important;transition:none!important}
         .fj-pet:hover{transform:none}
       }
       @media (max-width:560px){
@@ -460,7 +460,7 @@ window.__ModuleLoader__.load({
       // 点她中间那块（身体）敲一下：出个声、飘一句彩头、她在原地轻轻一沉。
       // 彩头由宿主随机（网页和桌面壳看到的是同一份累计），拿不到就本地随便挑一个。
       const MERIT_LABELS = ['功德', '财富', '桃花运', '好运', '健康'];
-      // 素材是随包的 assets/muyu.wav（宿主 /api/dsh-fojing-pet.sound 直出）。
+      // 素材是随包的 assets/muyu.wav（宿主 /api/dsh-lianjing.sound 直出）。
       // 网页端「没声」多半不是文件的事：没交互过、被自动播放策略拦、还没解码完，play() 都会 reject。
       // 所以两条腿走路：先放 wav；放不出来就现场用 WebAudio 合成一记「梆」。录音只用于排查。
       const SOUND_LOG = [];
@@ -744,7 +744,7 @@ window.__ModuleLoader__.load({
       const startDrag = (event) => {
         if (event.button !== 0) return;
         primeSound(); // 第一次交互就把木鱼素材叫醒
-        const rect = event.currentTarget.closest('[data-fojing-pet]')?.getBoundingClientRect();
+        const rect = event.currentTarget.closest('[data-lianjing]')?.getBoundingClientRect();
         if (!rect) return;
         drag.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top, moved: false };
         look(120000); // 被搬着的时候睁眼
@@ -1393,7 +1393,7 @@ window.__ModuleLoader__.load({
         }, shellBusy ? '收回中…' : '收回桌宠');
       }
 
-      return h('div', { style, 'data-fojing-pet': true },
+      return h('div', { style, 'data-lianjing': true },
         h('style', { dangerouslySetInnerHTML: { __html: CSS } }),
         h('div', { className: 'fj-anchor' },
           h('div', {
@@ -1485,7 +1485,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       hostCtx = ctx; // 功课页的「打开这个对话」要用它取 uiWorkspace
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-        name: 'shell.overlay', id: 'dsh-fojing-pet', order: 88,
+        name: 'shell.overlay', id: 'dsh-lianjing', order: 88,
       }, Pet));
     }
 

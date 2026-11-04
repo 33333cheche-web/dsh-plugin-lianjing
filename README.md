@@ -1,6 +1,22 @@
-# 莲鲸 · 佛经学习桌宠
+# 莲鲸 · 陪你干活的桌宠
 
-DSH 插件。一只盘坐在莲花座上的鲸鱼娘，蹲在右下角陪你看住这一屋子的 agent——**功课面板**列着 DSH 里的会话：哪个项目在跑、子任务做到哪、烧了多少 token、跑了多久，点一下那行就能跳回对应的对话。她顺带会掏出一张**浅杏古书卡片**，一段经文原文、一段逐句释义、几条名相解释、一个当天能做的练习，「逐句读」可以把四部经一部一部读完并记住进度。点「放她到桌面」她会变成独立窗口，关掉 DSH 也还站在桌角。
+一只盘坐在莲花座上的鲸鱼娘，浮在屏幕右下角陪你干活。
+
+她最要紧的活儿是**看住这一屋子的 agent**：功课面板列着 DSH 里的会话——哪个项目在跑、子任务做到哪、烧了多少 token、跑了多久，按项目串成一棵树；点开那一行，就能跳回对应的对话。有活在跑的时候，她背后会亮一圈慢慢转的金色佛光。
+
+闲下来她会陪你敲两下木鱼（点她身体中间「梆」一声，攒「已积功德」），顺手翻两页佛经——那是她的小爱好，不是她的正业。
+
+- **网页浮层**：DSH 页面右下角，跟着窗口走
+- **桌面壳**：点「放她到桌面」变成透明置顶的独立窗口，脱离 DSH 也还在（Windows）
+- **三档尺寸**：100% / 80% / 62%，最大就是原尺寸
+
+> 名字的由来：坐在**莲**台打坐的**鲸**鱼娘，合起来就是「莲鲸」。她安静，「鲸」又有点像「惊」——尽量不惊动你。
+
+---
+
+## 顺便读两句经
+
+她兜里揣着一张**浅杏古书卡片**：一段经文原文、一段逐句释义、几条名相解释、一个当天能做的练习。「逐句读」可以把几部经一部一部读完，各自记进度。
 
 内置四部汉传常诵经典，逐句分科，共 **67 句**：
 
@@ -56,22 +72,33 @@ DSH 插件。一只盘坐在莲花座上的鲸鱼娘，蹲在右下角陪你看�
 
 ## 安装
 
+需要 **DSH 桌面版**（Windows）和 Node 18+。
+
+**方式一：安装包（给同事最省事）**
+
 ```powershell
-node 佛经学习\install-plugin.mjs
+dsh plugin --profile desktop add "D:\tools\dsh-plugin-lianjing-2.0.0.tgz"
 ```
 
-脚本做的事：在 `~/.dsh/plugins/dsh-plugin-fojing-pet` 建一个指向本目录的**目录联接**（这样 profile 的 `package.json` 里不会出现中文路径）→ 备份 profile 的 `package.json` → 加入依赖与 `dsh.profile.bundles` → `pnpm install`。
+**方式二：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
+
+```powershell
+git clone https://github.com/wocheng/dsh-plugin-lianjing.git
+dsh plugin --profile desktop add "link:D:\path\to\dsh-plugin-lianjing"
+```
+
+两种方式都会同时把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。撤掉用 `dsh plugin --profile desktop remove dsh-plugin-lianjing`。
 
 **装完必须重启 DSH 桌面应用**（desktop profile 由 Electron 独占），右下角才会出现莲鲸。
 
-在 DSH 的插件列表里，她用的是**自己的形象当图标**（`icon.png`，256×256，从 `assets/icon-256.png` 来的），简介也按她现在的活儿重写了——先说的是「桌宠 · 帮你看住所有 agent」，佛经是附带的，不再是「一个学经的」。
+在 DSH 的插件列表里，她用的是**自己的形象当图标**（`icon.png`，256×256，从 `assets/icon-256.png` 来的）。
 
-还原：`package.json.bak-<时间戳>` 拷回 profile 目录，再 `pnpm install`。
+> 从 1.x 升上来：包名换成了 `dsh-plugin-lianjing`（原来叫 `dsh-plugin-fojing-pet`），先 `remove` 旧的再装新的；攒的「已积功德」会自动从旧的状态文件搬过来，不会清零。
 
 ## 配置
 
 ```yaml
-- id: dsh-fojing-pet
+- id: dsh-lianjing
   config:
     enabled: true
     everySeconds: 3600      # 每小时
@@ -172,7 +199,7 @@ node 佛经学习\install-plugin.mjs
 - 右键菜单：复位位置 / 收起卡片 / 退出桌宠
 - 卡片顶部两个 tab：**功课（默认）/ 今日读经**；功课页每 5 秒拉一次数据，收起时每 15 秒只为更新小标签
 - 功课页按项目归成树（最多 8 个会话）：同一个项目下的几个会话收在一个项目节点下，项目行显示「几个会话 / 在跑几个 / token 合计 / 最近活动」，点项目行收起整组
-- 展开行底部有 `在 DSH 里打开这个对话 →`：壳是独立进程、够不到网页的 `uiWorkspace`，所以它把请求 POST 给宿主的 `/dsh-fojing-pet/open`，网页那侧下一拍拉快照时接力切过去（壳开着时网页端轮询从 20 秒提到 2.5 秒，点完两三秒就跳）
+- 展开行底部有 `在 DSH 里打开这个对话 →`：壳是独立进程、够不到网页的 `uiWorkspace`，所以它把请求 POST 给宿主的 `/dsh-lianjing/open`，网页那侧下一拍拉快照时接力切过去（壳开着时网页端轮询从 20 秒提到 2.5 秒，点完两三秒就跳）
 - 数据变少或空态时窗口会自己缩回去，不留一大片透明空白
 - 底部两个小标签**常显**：`N 分钟后再读` + `已积功德 N`（没敲过就显示 0，不会整条消失）
 - 右上角同样是一枚**呼吸发光的灵感光点**（替换掉原来的数字角标），点它展开/收起
@@ -182,7 +209,7 @@ node 佛经学习\install-plugin.mjs
 - 窗口高度按内容自适应，换经书不会被裁顶
 - `-Opaque` 开关可在个别显卡/远程桌面下退回不透明窗口
 
-数据走插件注册的**免鉴权回环路由**（`/dsh-fojing-pet/*`）：只读 GET，写操作要求 `x-dsh-fojing-pet` 自定义请求头 **且带 `application/json` 的 body**，跨站请求拿不到这个头，所以不会被网页 CSRF。`POST /next` 可以带 `{ "sutraId": "xin-jing" }` 指定从哪部经出卡，不带就顺着语料顺序走。
+数据走插件注册的**免鉴权回环路由**（`/dsh-lianjing/*`）：只读 GET，写操作要求 `x-dsh-lianjing` 自定义请求头 **且带 `application/json` 的 body**，跨站请求拿不到这个头，所以不会被网页 CSRF。`POST /next` 可以带 `{ "sutraId": "xin-jing" }` 指定从哪部经出卡，不带就顺着语料顺序走。
 
 ### 5. 功课面板（读 DSH 自己的活儿）
 
@@ -234,7 +261,7 @@ LLM 4 小时 38 分    工具 1 小时 45 分
 
 两端用的是同一张 `assets/halo.png`（512×512，环带在半径 55%~83%，alpha 最高 140），网页端 `background-image` 铺上去再 `blur(7px)` 糊开、`rotate` 转 5.5 秒一圈；桌面壳是 WPF，用 `RotateTransform` + `DoubleAnimation` 转、`Running` 时淡入、闲时淡出后 `Collapsed`。兜底：宿主没给 `sprites.halo` 时网页端退回原来那版 `conic-gradient` 细环，不会开天窗。两边比例一致：直径 = 立绘高度 × 206/196，圆心在立绘顶部往下 53% 处。
 
-**数据怎么来的**：全部由宿主侧一次折叠好，挂在 `/dsh-fojing-pet/work.json`，网页和桌面壳读同一份 JSON（都不去解析几百 MB 的会话日志）：
+**数据怎么来的**：全部由宿主侧一次折叠好，挂在 `/dsh-lianjing/work.json`，网页和桌面壳读同一份 JSON（都不去解析几百 MB 的会话日志）：
 
 - `ctx.sessionQuery.listSessions()` 列全部会话（含冷会话，带 `createdAt`、`cwd`、`agentPreset`）
 - `ctx.sessionQuery.observeSession(id)` 读某个会话的投影（`todos` / `tokenUsage` / `sessionStats` / `title`）
@@ -281,15 +308,15 @@ corpus/index.json     经目清单（version 2）：列出四个语料文件名
 重建语料：
 
 ```powershell
-node 佛经学习\_tools\build-jingang.mjs
-node 佛经学习\_tools\build-pumen.mjs
+node _tools\build-jingang.mjs
+node _tools\build-pumen.mjs
 ```
 
 ---
 
-## 佛经学习参谋（agent preset）
+## 读经参谋（agent preset）
 
-`cordis.patch.yml` 里注册了 `fojing-pet` 预设，新建会话即可用。它的规矩写在 `skill/fojing-vademecum/SKILL.md`，运行时由 Host 注入语料路径与篇目索引：
+`cordis.patch.yml` 里注册了 `lianjing` 预设，新建会话即可用。它的规矩写在 `skill/lianjing-vademecum/SKILL.md`，运行时由 Host 注入语料路径与篇目索引：
 
 1. 先把问题定位到具体的经和句子，定位不到就说定位不到；
 2. 引号里的原文必须逐字来自 `text` 字段，一个字都不能改；
@@ -311,16 +338,15 @@ node 佛经学习\_tools\build-pumen.mjs
 ## 验证
 
 ```powershell
-# 离线纯函数 + 语料 + 客户端 + patch + 壳脚本 + 清单，共 204 项断言
+# 离线纯函数 + 语料 + 客户端 + patch + 壳脚本 + 清单，两百来项断言
 node verify\smoke.mjs
 ```
 
-真实加载验证（不影响在用的 profile）：
+真实加载验证（另起一个临时 profile，不影响在用的）：
 
 ```powershell
-node 佛经学习\_make-test-profile.mjs
-dsh --profile fojing-test --port 18778 --no-open
-# 访问 http://127.0.0.1:18778/dsh-fojing-pet/pet.json
+dsh --profile lianjing-test --port 18778 --no-open
+# 访问 http://127.0.0.1:18778/dsh-lianjing/pet.json
 ```
 
 已在临时实例上实测：插件加载、`pet.json` 200、素材 274KB PNG、定时出卡、四部经 `sutra.json?id=` 各自返回 11/32/12/12 句、`segment-read` 进度写入、无自定义头请求被 403 拒绝；桌面壳在 448×250（收起）/ 784×1239（展开）下渲染正常。
@@ -330,10 +356,11 @@ dsh --profile fojing-test --port 18778 --no-open
 ## 目录
 
 ```
-dsh-plugin-fojing-pet/
+dsh-plugin-lianjing/
 ├─ index.js            # Host：定时、状态、路由、逐句进度、skill、桌面壳监管
 ├─ client.js           # Web：悬浮桌宠 + 古书卡片 + 逐句学习面板
-├─ cordis.patch.yml    # 插件配置 + 佛经学习参谋 preset
+├─ online.js           # 联网取经：从白名单站点抓原文切成草稿
+├─ cordis.patch.yml    # 插件配置 + 读经参谋 preset
 ├─ icon.png            # 插件列表里用的图标（她的脸，256×256）
 ├─ assets/             # 四张立绘（含敲木鱼）+ 图标 + muyu.wav（木鱼声）
 ├─ corpus/
@@ -342,11 +369,13 @@ dsh-plugin-fojing-pet/
 │  ├─ jin-gang-jing.json  # 金刚经 32 分
 │  ├─ pu-men-pin.json  # 普门品 12 段
 │  └─ ji-xiang-jing.json  # 吉祥经 12 段
-├─ skill/fojing-vademecum/SKILL.md
+├─ skill/lianjing-vademecum/SKILL.md
 ├─ desktop/pet-shell.ps1   # Windows 独立悬浮壳（含功课页 + 敲木鱼）
 ├─ scripts/make-muyu.mjs   # 合成 assets/muyu.wav（确定性，可重跑）
 ├─ verify/smoke.mjs
-└─ docs/                # 设计文档 + plans/
+├─ _raw/               # 抓下来的经文原文（语料重建用，不打进安装包）
+├─ _tools/             # 切分脚本，_raw → corpus
+└─ docs/               # 设计文档 + plans/
 ```
 
 ## 状态

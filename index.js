@@ -1,9 +1,9 @@
 /**
- * Host half of `dsh-plugin-fojing-pet`.
+ * Host half of `dsh-plugin-lianjing`.
  *
  * 职责：
  *   - 定期从内置语料里取一句经文，做成一张"古书卡片"（原文 + 现代白话 + 今日练习）；
- *   - 把卡片历史、已读状态、下次时间持久化到 `$DSH_HOME/storages/dsh-fojing-pet.json`；
+ *   - 把卡片历史、已读状态、下次时间持久化到 `$DSH_HOME/storages/dsh-lianjing.json`；
  *   - 通过同源路由把状态和立绘素材交给 Web 客户端。
  *
  * 本阶段不做模型调用：卡片内容全部来自随包语料，离线可用、可离线校验。
@@ -19,40 +19,40 @@ import {
   pageTitle, sliceBody, stripHtmlLines,
 } from './online.js';
 
-export const name = 'dsh-fojing-pet';
+export const name = 'dsh-lianjing';
 export const inject = ['connection', 'timer'];
 
 export const ROUTES = {
-  state: '/api/dsh-fojing-pet.state',
-  next: '/api/dsh-fojing-pet.next',
-  read: '/api/dsh-fojing-pet.read',
-  asset: '/api/dsh-fojing-pet.asset',
-  corpus: '/api/dsh-fojing-pet.corpus',
-  sutra: '/api/dsh-fojing-pet.sutra',
-  segmentRead: '/api/dsh-fojing-pet.segment-read',
-  shell: '/api/dsh-fojing-pet.shell',
-  catalog: '/api/dsh-fojing-pet.catalog',
-  work: '/api/dsh-fojing-pet.work',
-  import: '/api/dsh-fojing-pet.import',
-  sound: '/api/dsh-fojing-pet.sound',
-  muyu: '/api/dsh-fojing-pet.muyu',
+  state: '/api/dsh-lianjing.state',
+  next: '/api/dsh-lianjing.next',
+  read: '/api/dsh-lianjing.read',
+  asset: '/api/dsh-lianjing.asset',
+  corpus: '/api/dsh-lianjing.corpus',
+  sutra: '/api/dsh-lianjing.sutra',
+  segmentRead: '/api/dsh-lianjing.segment-read',
+  shell: '/api/dsh-lianjing.shell',
+  catalog: '/api/dsh-lianjing.catalog',
+  work: '/api/dsh-lianjing.work',
+  import: '/api/dsh-lianjing.import',
+  sound: '/api/dsh-lianjing.sound',
+  muyu: '/api/dsh-lianjing.muyu',
 };
 
 /** 独立桌面壳用的免鉴权回环路由（只读 + 带自定义头的 POST）。 */
 export const SHELL_ROUTES = {
-  state: '/dsh-fojing-pet/pet.json',
-  asset: '/dsh-fojing-pet/asset.png',
-  next: '/dsh-fojing-pet/next',
-  read: '/dsh-fojing-pet/read',
-  sutra: '/dsh-fojing-pet/sutra.json',
-  segmentRead: '/dsh-fojing-pet/segment-read',
-  catalog: '/dsh-fojing-pet/catalog.json',
-  import: '/dsh-fojing-pet/import',
-  heartbeat: '/dsh-fojing-pet/heartbeat',
-  work: '/dsh-fojing-pet/work.json',
-  sound: '/dsh-fojing-pet/muyu.wav',
-  muyu: '/dsh-fojing-pet/muyu',
-  open: '/dsh-fojing-pet/open',
+  state: '/dsh-lianjing/pet.json',
+  asset: '/dsh-lianjing/asset.png',
+  next: '/dsh-lianjing/next',
+  read: '/dsh-lianjing/read',
+  sutra: '/dsh-lianjing/sutra.json',
+  segmentRead: '/dsh-lianjing/segment-read',
+  catalog: '/dsh-lianjing/catalog.json',
+  import: '/dsh-lianjing/import',
+  heartbeat: '/dsh-lianjing/heartbeat',
+  work: '/dsh-lianjing/work.json',
+  sound: '/dsh-lianjing/muyu.wav',
+  muyu: '/dsh-lianjing/muyu',
+  open: '/dsh-lianjing/open',
 };
 
 /** 敲木鱼的时候随机认领一条彩头：都是玩笑，别当真，也别当真事上报。 */
@@ -76,10 +76,10 @@ const SPRITES = {
 const HALO_FILE = 'halo.png';
 
 const PET_NAME = '莲鲸';
-const SKILL_NAME = 'fojing-vademecum';
+const SKILL_NAME = 'lianjing-vademecum';
 const DAY = 86400000;
 
-export class FojingPetError extends Error {}
+export class LianjingError extends Error {}
 
 /** 去掉 SKILL.md 的 YAML frontmatter。 */
 export function stripFrontmatter(text) {
@@ -123,6 +123,12 @@ export function resolveDshHome(env = process.env) {
 }
 
 export function resolveStatePath(env = process.env) {
+  return join(resolveDshHome(env), 'storages', 'dsh-lianjing.json');
+}
+
+// 改名前的状态文件。老用户（包括我自己）攒的功德、已读位置、卡片历史都在里面，
+// 首次启动时搬过来，别让「已积功德」一夜清零。
+export function resolveLegacyStatePath(env = process.env) {
   return join(resolveDshHome(env), 'storages', 'dsh-fojing-pet.json');
 }
 
@@ -253,7 +259,7 @@ export function apply(ctx, config) {
   const log = (level, message) => {
     try {
       const logger = ctx.logger;
-      if (logger && typeof logger[level] === 'function') logger[level](`[fojing-pet] ${message}`);
+      if (logger && typeof logger[level] === 'function') logger[level](`[lianjing] ${message}`);
     } catch { /* 日志不能影响桌宠 */ }
   };
 
@@ -309,6 +315,18 @@ export function apply(ctx, config) {
 
   const loadState = async () => {
     try {
+      // 旧名字的状态文件还在、新文件还没有：先搬过来（功德不清零）
+      try {
+        const legacyPath = resolveLegacyStatePath();
+        let hasNew = true;
+        try { await readFile(statePath, 'utf8'); } catch { hasNew = false; }
+        if (!hasNew) {
+          const legacy = await readFile(legacyPath, 'utf8');
+          await mkdir(dirname(statePath), { recursive: true });
+          await writeFile(statePath, legacy, 'utf8');
+          log('info', '已从改名前的状态文件搬过功德和卡片进度');
+        }
+      } catch { /* 没有旧文件就算了 */ }
       const saved = JSON.parse(await readFile(statePath, 'utf8'));
       state.cursor = Number.isFinite(Number(saved?.cursor)) ? Number(saved.cursor) : 0;
       state.lastRunAt = typeof saved?.lastRunAt === 'string' ? saved.lastRunAt : null;
@@ -344,12 +362,12 @@ export function apply(ctx, config) {
     try {
       const manifest = JSON.parse(await readFile(corpusPath, 'utf8'));
       const manifestErrors = validateCorpus(manifest);
-      if (manifestErrors.length) throw new FojingPetError(manifestErrors.slice(0, 3).join('；'));
+      if (manifestErrors.length) throw new LianjingError(manifestErrors.slice(0, 3).join('；'));
       const sutras = [];
       for (const file of manifest.sutras) {
         const doc = JSON.parse(await readFile(join(corpusDir, file), 'utf8'));
         const errors = validateSutra(doc);
-        if (errors.length) throw new FojingPetError(errors.slice(0, 3).join('；'));
+        if (errors.length) throw new LianjingError(errors.slice(0, 3).join('；'));
         sutras.push(doc);
       }
       corpus = {
@@ -392,18 +410,18 @@ export function apply(ctx, config) {
   }));
 
   const fetchPage = async (url) => {
-    if (!isAllowedUrl(url)) throw new FojingPetError('只支持 fojing.com 的经文页');
+    if (!isAllowedUrl(url)) throw new LianjingError('只支持 fojing.com 的经文页');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
       const response = await fetch(url, {
-        headers: { 'user-agent': 'Mozilla/5.0 (compatible; dsh-plugin-fojing-pet)' },
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; dsh-plugin-lianjing)' },
         signal: controller.signal,
         redirect: 'follow',
       });
-      if (!response.ok) throw new FojingPetError(`抓取失败：HTTP ${response.status}`);
+      if (!response.ok) throw new LianjingError(`抓取失败：HTTP ${response.status}`);
       const html = await response.text();
-      if (html.length > 4000000) throw new FojingPetError('页面太大了，不像是经文页');
+      if (html.length > 4000000) throw new LianjingError('页面太大了，不像是经文页');
       return html;
     } finally {
       clearTimeout(timer);
@@ -416,16 +434,16 @@ export function apply(ctx, config) {
     let entry = null;
     if (typeof payload.catalogId === 'string' && payload.catalogId) {
       entry = IMPORT_CATALOG.find((item) => item.id === payload.catalogId) || null;
-      if (!entry) throw new FojingPetError(`没有这个经目：${payload.catalogId}`);
+      if (!entry) throw new LianjingError(`没有这个经目：${payload.catalogId}`);
     } else if (typeof payload.url === 'string' && payload.url.trim()) {
       entry = entryFromUrl(payload.url.trim());
-      if (!entry) throw new FojingPetError('只支持 fojing.com 的经文页');
+      if (!entry) throw new LianjingError('只支持 fojing.com 的经文页');
     } else {
-      throw new FojingPetError('需要 catalogId 或 url');
+      throw new LianjingError('需要 catalogId 或 url');
     }
     entry = { ...entry };
     if (corpus.sutras.some((s) => s.id === entry.id)) {
-      throw new FojingPetError(`《${entry.title}》已经在语料里了`);
+      throw new LianjingError(`《${entry.title}》已经在语料里了`);
     }
     importing = true;
     try {
@@ -435,9 +453,9 @@ export function apply(ctx, config) {
         if (title) { entry.title = title.slice(0, 24); entry.fullTitle = title; }
       }
       const sliced = sliceBody(stripHtmlLines(html), entry.start, entry.end);
-      if (!sliced.ok) throw new FojingPetError(sliced.error);
+      if (!sliced.ok) throw new LianjingError(sliced.error);
       const built = buildDraft(entry, sliced.lines);
-      if (!built.ok) throw new FojingPetError(built.error);
+      if (!built.ok) throw new LianjingError(built.error);
       await writeFile(join(corpusDir, `${entry.id}.json`), JSON.stringify(built.doc, null, 2) + '\n', 'utf8');
       const manifest = JSON.parse(await readFile(corpusPath, 'utf8'));
       const files = Array.isArray(manifest.sutras) ? manifest.sutras : [];
@@ -653,7 +671,7 @@ export function apply(ctx, config) {
     arm();
   };
 
-  ctx.effect(() => () => { clearPending(); }, 'fojing-pet.timer');
+  ctx.effect(() => () => { clearPending(); }, 'lianjing.timer');
 
   // --- HTTP ---------------------------------------------------------------
   const json = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -905,7 +923,7 @@ export function apply(ctx, config) {
       if (sprite === 'halo') {
         try {
           const [bytes, info] = await Promise.all([readFile(join(assetsDir, HALO_FILE)), stat(join(assetsDir, HALO_FILE))]);
-          if (!info.size) throw new FojingPetError('空文件');
+          if (!info.size) throw new LianjingError('空文件');
           return new Response(bytes, {
             headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=3600' },
           });
@@ -918,7 +936,7 @@ export function apply(ctx, config) {
       for (const file of candidates) {
         try {
           const [bytes, info] = await Promise.all([readFile(join(assetsDir, file)), stat(join(assetsDir, file))]);
-          if (!info.size) throw new FojingPetError('空文件');
+          if (!info.size) throw new LianjingError('空文件');
           return new Response(bytes, {
             headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=3600' },
           });
@@ -1024,7 +1042,7 @@ export function apply(ctx, config) {
       for (const dispose of disposers) {
         try { dispose?.(); } catch { /* 已释放 */ }
       }
-    }, 'fojing-pet.routes');
+    }, 'lianjing.routes');
   });
 
   // --- skill：把随包语料与引用规则交给 agent 预设 --------------------------
@@ -1070,7 +1088,7 @@ export function apply(ctx, config) {
         resourceBase: { kind: 'directory', path: corpusDir },
         invocation: { modelInvocable: true, userInvocable: true },
       });
-      scope.effect(() => () => { try { dispose?.(); } catch { /* 已释放 */ } }, 'fojing-pet.skill');
+      scope.effect(() => () => { try { dispose?.(); } catch { /* 已释放 */ } }, 'lianjing.skill');
     };
     void ready.then(install).catch((error) => log('warn', `skill 注册失败：${error?.message ?? error}`));
   });
@@ -1178,7 +1196,7 @@ export function apply(ctx, config) {
       // 地址给错了壳是能画出来的，只是永远「静坐中 / 已积功德 0」——
       // 与其让她在桌上当个假人，不如当场说清楚。
       const reachable = await Promise.race([
-        fetch(`${safeOrigin}/dsh-fojing-pet/pet.json`, { signal: AbortSignal.timeout(1500) })
+        fetch(`${safeOrigin}/dsh-lianjing/pet.json`, { signal: AbortSignal.timeout(1500) })
           .then((response) => response.ok).catch(() => false),
         new Promise((resolve) => setTimeout(() => resolve(null), 1800)),
       ]);
@@ -1235,7 +1253,7 @@ export function apply(ctx, config) {
           }
           if (req.method === 'POST') {
             const type = String(req.headers['content-type'] || '');
-            if (!type.includes('application/json') || req.headers['x-dsh-fojing-pet'] !== '1') {
+            if (!type.includes('application/json') || req.headers['x-dsh-lianjing'] !== '1') {
               res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
               res.end('forbidden');
               return;
@@ -1278,7 +1296,7 @@ export function apply(ctx, config) {
         for (const dispose of disposers) {
           try { dispose?.(); } catch { /* 已释放 */ }
         }
-      }, 'fojing-pet.shell-routes');
+      }, 'lianjing.shell-routes');
     });
   }
 

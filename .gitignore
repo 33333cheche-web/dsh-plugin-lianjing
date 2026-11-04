@@ -1,0 +1,19 @@
+# 依赖 / 构建产物
+node_modules/
+pnpm-lock.yaml.bak*
+package.json.bak*
+*.tgz
+*.zip
+
+# 本地预览图
+_preview/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志
+*.log

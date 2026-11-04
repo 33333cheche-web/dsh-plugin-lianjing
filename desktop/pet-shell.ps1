@@ -8,7 +8,7 @@
 # 莲鲸 · Windows 独立桌宠壳
 #
 # 纯 WPF，无第三方依赖：透明、无边框、始终置顶、可拖动，能脱离 DSH 窗口独立站着。
-# 数据来自插件注册的免鉴权回环路由（只读 GET + 带 x-dsh-fojing-pet 头的 POST）。
+# 数据来自插件注册的免鉴权回环路由（只读 GET + 带 x-dsh-lianjing 头的 POST）。
 #
 # 用法：pet-shell.ps1 -Origin http://127.0.0.1:10567 -AssetDir <插件 assets 目录>
 
@@ -19,21 +19,21 @@ Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Windows.Forms
 
-$StateUrl = "$Origin/dsh-fojing-pet/pet.json"
-$NextUrl  = "$Origin/dsh-fojing-pet/next"
-$ReadUrl  = "$Origin/dsh-fojing-pet/read"
-$ImportUrl  = "$Origin/dsh-fojing-pet/import"
-$BeatUrl   = "$Origin/dsh-fojing-pet/heartbeat"
-$CatalogUrl = "$Origin/dsh-fojing-pet/catalog.json"
-$WorkUrl  = "$Origin/dsh-fojing-pet/work.json"
-$OpenUrl   = "$Origin/dsh-fojing-pet/open"
+$StateUrl = "$Origin/dsh-lianjing/pet.json"
+$NextUrl  = "$Origin/dsh-lianjing/next"
+$ReadUrl  = "$Origin/dsh-lianjing/read"
+$ImportUrl  = "$Origin/dsh-lianjing/import"
+$BeatUrl   = "$Origin/dsh-lianjing/heartbeat"
+$CatalogUrl = "$Origin/dsh-lianjing/catalog.json"
+$WorkUrl  = "$Origin/dsh-lianjing/work.json"
+$OpenUrl   = "$Origin/dsh-lianjing/open"
 # 敲木鱼：一次彩头 + 一段随包音效（启动时下到临时目录，之后不再联网取）
-$MuyuUrl   = "$Origin/dsh-fojing-pet/muyu"
-$MuyuWavUrl = "$Origin/dsh-fojing-pet/muyu.wav"
-$MuyuWavPath = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-fojing-pet-muyu-' + $PID + '.wav')
+$MuyuUrl   = "$Origin/dsh-lianjing/muyu"
+$MuyuWavUrl = "$Origin/dsh-lianjing/muyu.wav"
+$MuyuWavPath = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-lianjing-muyu-' + $PID + '.wav')
 # 敲木鱼那一瞬间换的立绘：宿主把 knock 加进 SPRITES，壳这边按名字取；404 就静默用回原图
-$KnockSpriteUrl = "$Origin/dsh-fojing-pet/asset.png?name=knock"
-$KnockSpriteTemp = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-fojing-pet-knock-' + $PID + '.png')
+$KnockSpriteUrl = "$Origin/dsh-lianjing/asset.png?name=knock"
+$KnockSpriteTemp = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-lianjing-knock-' + $PID + '.png')
 
 $PetHeight  = 210
 $CardHeight = 470
@@ -58,10 +58,10 @@ $script:SizePreset = 'large'
 $script:PetScale = 1.0
 $script:SizeChips = @{}
 # 桌面壳的偏好没有宿主侧存档（网页那只记在 localStorage），所以壳自己记这一个值：
-# %LOCALAPPDATA%\dsh-fojing-pet\pet-shell.json，只放 sizePreset；读不到或坏了就当「大」。
+# %LOCALAPPDATA%\dsh-lianjing\pet-shell.json，只放 sizePreset；读不到或坏了就当「大」。
 $PetStatePath = ''
 try {
-  if ($env:LOCALAPPDATA) { $PetStatePath = Join-Path (Join-Path $env:LOCALAPPDATA 'dsh-fojing-pet') 'pet-shell.json' }
+  if ($env:LOCALAPPDATA) { $PetStatePath = Join-Path (Join-Path $env:LOCALAPPDATA 'dsh-lianjing') 'pet-shell.json' }
 } catch { $PetStatePath = '' }
 
 # --- 样式 -------------------------------------------------------------------
@@ -247,7 +247,7 @@ function New-SutraChip {
 
 function Invoke-PetApi {
   param([string]$Method = 'GET', [string]$Url, $Body = $null)
-  $headers = @{ 'x-dsh-fojing-pet' = '1' }
+  $headers = @{ 'x-dsh-lianjing' = '1' }
   # POST 必须带 application/json 的 body，否则插件的 CSRF 守卫会直接 403。
   if ($Method -ne 'GET') {
     if ($null -eq $Body) { $Body = @{} }
@@ -1236,7 +1236,7 @@ function Start-WorkFetch {
     $fetchScript = @'
 param([string]$Url)
 $ErrorActionPreference = 'Stop'
-Invoke-RestMethod -Method 'GET' -Uri $Url -Headers @{ 'x-dsh-fojing-pet' = '1' } -TimeoutSec 5
+Invoke-RestMethod -Method 'GET' -Uri $Url -Headers @{ 'x-dsh-lianjing' = '1' } -TimeoutSec 5
 '@
     $ps = [powershell]::Create()
     $ps.Runspace = $script:WorkRunspace
@@ -1345,10 +1345,10 @@ $script:AssetFetchScript = @'
 param([string]$WavUrl, [string]$WavPath, [bool]$WantWav, [string]$SpriteUrl, [string]$SpritePath, [bool]$WantSprite)
 $ErrorActionPreference = 'Continue'
 if ($WantWav) {
-  try { Invoke-WebRequest -Method 'GET' -Uri $WavUrl -Headers @{ 'x-dsh-fojing-pet' = '1' } -OutFile $WavPath -UseBasicParsing -TimeoutSec 6 } catch { }
+  try { Invoke-WebRequest -Method 'GET' -Uri $WavUrl -Headers @{ 'x-dsh-lianjing' = '1' } -OutFile $WavPath -UseBasicParsing -TimeoutSec 6 } catch { }
 }
 if ($WantSprite) {
-  try { Invoke-WebRequest -Method 'GET' -Uri $SpriteUrl -Headers @{ 'x-dsh-fojing-pet' = '1' } -OutFile $SpritePath -UseBasicParsing -TimeoutSec 6 } catch { }
+  try { Invoke-WebRequest -Method 'GET' -Uri $SpriteUrl -Headers @{ 'x-dsh-lianjing' = '1' } -OutFile $SpritePath -UseBasicParsing -TimeoutSec 6 } catch { }
 }
 '@
 
@@ -1552,11 +1552,11 @@ function Start-KnockFetch {
       $rs.Open()
       $script:KnockRunspace = $rs
     }
-    # 防跨站守卫要求：带 x-dsh-fojing-pet 头 + application/json + 一个 json body
+    # 防跨站守卫要求：带 x-dsh-lianjing 头 + application/json + 一个 json body
     $knockScript = @'
 param([string]$Url)
 $ErrorActionPreference = 'Stop'
-Invoke-RestMethod -Method 'POST' -Uri $Url -Headers @{ 'x-dsh-fojing-pet' = '1' } -ContentType 'application/json' -Body '{}' -TimeoutSec 5
+Invoke-RestMethod -Method 'POST' -Uri $Url -Headers @{ 'x-dsh-lianjing' = '1' } -ContentType 'application/json' -Body '{}' -TimeoutSec 5
 '@
     $ps = [powershell]::Create()
     $ps.Runspace = $script:KnockRunspace
@@ -1651,7 +1651,7 @@ function Invoke-MuyuKnock {
 }
 
 # --- 在 DSH 里打开对话 ---------------------------------------------------------
-# 壳是独立进程，够不到网页的客户端服务，所以走「宿主接力」：壳 POST /dsh-fojing-pet/open，
+# 壳是独立进程，够不到网页的客户端服务，所以走「宿主接力」：壳 POST /dsh-lianjing/open，
 # 网页每 2.5 秒拉一次快照，看到新请求就 uiWorkspace.openSession(id)。
 # 行自己用 PreviewMouseLeftButtonUp 做展开/收起（隧道事件先到行），所以点按钮时得先认出
 # 「这一下落没落在按钮里」，否则会顺手把行收起来。
@@ -1696,12 +1696,12 @@ function Start-OpenSession {
       $rs.Open()
       $script:OpenRunspace = $rs
     }
-    # 防跨站守卫要求：x-dsh-fojing-pet 头 + application/json + 一个 json body
+    # 防跨站守卫要求：x-dsh-lianjing 头 + application/json + 一个 json body
     $openScript = @'
 param([string]$Url, [string]$Id)
 $ErrorActionPreference = 'Stop'
 $body = @{ id = $Id } | ConvertTo-Json -Compress
-Invoke-RestMethod -Method 'POST' -Uri $Url -Headers @{ 'x-dsh-fojing-pet' = '1' } -ContentType 'application/json' -Body $body -TimeoutSec 5
+Invoke-RestMethod -Method 'POST' -Uri $Url -Headers @{ 'x-dsh-lianjing' = '1' } -ContentType 'application/json' -Body $body -TimeoutSec 5
 '@
     $ps = [powershell]::Create()
     $ps.Runspace = $script:OpenRunspace

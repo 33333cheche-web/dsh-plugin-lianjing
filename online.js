@@ -90,7 +90,7 @@ export const IMPORT_CATALOG = [
   },
 ];
 
-const UA = 'Mozilla/5.0 (compatible; dsh-plugin-fojing-pet)';
+const UA = 'Mozilla/5.0 (compatible; dsh-plugin-lianjing)';
 
 /** 草稿句的释义占位：说清是草稿，不冒充讲解。 */
 const DRAFT_GIST = '这一句是联网取回的原文草稿，逐句释义还没整理。可以先自己读原文，意思不确定的地方记下来。';

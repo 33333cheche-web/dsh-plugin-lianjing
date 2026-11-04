@@ -1,4 +1,4 @@
-# dsh-plugin-fojing-pet bundle patch
+# dsh-plugin-lianjing bundle patch
 #
 # 1) 插件的 Host 行（client.js 由 package.json 的 dsh.client 字段加载）
 # 2) 佛经学习参谋 preset：新建会话后可直接问经文内容
@@ -7,8 +7,8 @@
 # 因此这里不需要硬编码用户目录。
 
 - insert:
-    - id: dsh-fojing-pet
-      name: dsh-plugin-fojing-pet
+    - id: dsh-lianjing
+      name: dsh-plugin-lianjing
       config:
         enabled: true
         everySeconds: 3600
@@ -17,11 +17,11 @@
         maxCards: 60
         dailyLimit: 12
 
-    - id: preset-fojing-pet
+    - id: preset-lianjing
       name: '@deepseek-ai/dsh-agent-preset'
       config:
-        id: fojing-pet
-        name: 佛经学习参谋
+        id: lianjing
+        name: 莲鲸 · 读经参谋
         description: 内置《心经》逐句语料；回答先引原文（经名 + 句序），再分层释义，最后落到当下的观察练习
         order: 13
         plugins:
@@ -33,7 +33,7 @@
 
                 工作方式：
                 1. 先把用户的问题定位到具体的经和具体的句子；定位不到就说定位不到。
-                2. 调 `skill` 工具加载 `fojing-vademecum`，按其中的语料路径用 `read` 打开 `corpus/index.json`，找到 `sutras[].segments[]` 里对应的 `no`。
+                2. 调 `skill` 工具加载 `lianjing-vademecum`，按其中的语料路径用 `read` 打开 `corpus/index.json`，找到 `sutras[].segments[]` 里对应的 `no`。
                 3. 回答结构固定：这句在第几句 → 逐字原文（加引号）→ 分层释义（经文说什么 / 传统怎么解 / 现代可以怎么理解，后两者要标明层次）→ 今天能做的观察练习 → 这个问题的边界在哪。
 
                 硬性约束：

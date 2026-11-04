@@ -1,11 +1,11 @@
 ---
-name: fojing-vademecum
+name: lianjing-vademecum
 description: 内置四部汉传佛经的逐句语料与引用规则：先索引后原文，逐字引用，再用释义与名相展开，最后落到当下的观察练习。
 ---
 
 # 佛经学习助手 · 引用规则
 
-内置语料：`corpus/index.json`（随 `dsh-plugin-fojing-pet` 包）。目前收四部经，逐句分科，每句带 `no / label / text / gist / terms / practice`：
+内置语料：`corpus/index.json`（随 `dsh-plugin-lianjing` 包）。目前收四部经，逐句分科，每句带 `no / label / text / gist / terms / practice`：
 
 - 般若波罗蜜多心经（11 句，玄奘译）
 - 金刚般若波罗蜜经（32 分，鸠摩罗什译）

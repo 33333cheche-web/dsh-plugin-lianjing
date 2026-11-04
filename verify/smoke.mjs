@@ -111,7 +111,7 @@ console.log('client');
 const clientSource = await readFile(join(root, 'client.js'), 'utf8');
 check('client 注册到 shell.overlay', clientSource.includes("ctx.slots.inject('shell.overlay'"));
 check('client 声明 inject slots', clientSource.includes("inject: ['slots']"));
-check('client 声明模块 id', clientSource.includes("id: 'dsh-plugin-fojing-pet'"));
+check('client 声明模块 id', clientSource.includes("id: 'dsh-plugin-lianjing'"));
 check('client 不硬编码 API 域名', !clientSource.includes('http://127.0.0.1:'));
 check('client 有逐句学习视图', clientSource.includes('studyView'));
 check('client 会标记单句已读', clientSource.includes('API.segmentRead'));
@@ -121,9 +121,9 @@ check('client 显示名相', clientSource.includes('fj-terms'));
 check('client 不再写免责声明', !clientSource.includes('非经文原句'));
 
 console.log('skill');
-const skillSource = await readFile(join(root, 'skill', 'fojing-vademecum', 'SKILL.md'), 'utf8');
+const skillSource = await readFile(join(root, 'skill', 'lianjing-vademecum', 'SKILL.md'), 'utf8');
 check('SKILL.md 有 frontmatter', skillSource.startsWith('---'));
-check('skill 声明了名称', /^name:\s*fojing-vademecum/m.test(skillSource));
+check('skill 声明了名称', /^name:\s*lianjing-vademecum/m.test(skillSource));
 const stripped = stripFrontmatter(skillSource);
 check('去 frontmatter 后非空', stripped.trim().length > 100);
 check('去 frontmatter 后不含 --- 开头', !stripped.startsWith('---'));
@@ -131,8 +131,8 @@ check('skill 有逐字引用规则', stripped.includes('逐字'));
 
 console.log('patch');
 const patch = await readFile(join(root, 'cordis.patch.yml'), 'utf8');
-check('patch 挂载插件行', patch.includes('dsh-plugin-fojing-pet'));
-check('patch 有佛经学习 preset', patch.includes('preset-fojing-pet') && patch.includes('id: fojing-pet'));
+check('patch 挂载插件行', patch.includes('dsh-plugin-lianjing'));
+check('patch 有佛经学习 preset', patch.includes('preset-lianjing') && patch.includes('id: lianjing'));
 check('patch 的 preset 引用 skill 工具', patch.includes('dsh-tool-skill'));
 check('patch 的 todo 带必填项', patch.includes('allowParallelInProgress'));
 
@@ -143,8 +143,8 @@ check('悬浮壳脚本存在', shellBytes.length > 2000, `${shellBytes.length} b
 check('悬浮壳带 UTF-8 BOM', shellBytes[0] === 0xef && shellBytes[1] === 0xbb && shellBytes[2] === 0xbf);
 const shellSource = shellBytes.toString('utf8');
 check('悬浮壳置顶透明', shellSource.includes('Topmost') && shellSource.includes('AllowsTransparency'));
-check('悬浮壳走回环公开路由', shellSource.includes('/dsh-fojing-pet/pet.json'));
-check('悬浮壳带自定义请求头', shellSource.includes('x-dsh-fojing-pet'));
+check('悬浮壳走回环公开路由', shellSource.includes('/dsh-lianjing/pet.json'));
+check('悬浮壳带自定义请求头', shellSource.includes('x-dsh-lianjing'));
 check('悬浮壳自己算拖动位移', shellSource.includes('Get-DpiScale') && shellSource.includes('CaptureMouse'));
 check('悬浮壳拖动按 DPI 缩放换算', shellSource.includes('TransformToDevice'));
 check('悬浮壳把窗口夹在工作区内', shellSource.includes('Move-PetTo') && shellSource.includes('WorkArea'));
@@ -246,8 +246,8 @@ check('壳也有眼神节拍', shellSource.includes('Update-PetImage') && shellS
 
 console.log('功课 / 工作状态');
 // 数字全部来自 DSH 自己的会话数据：一条免鉴权路由给两个壳共用，不去解析会话日志
-check('宿主有功课路由', hostSource.includes("work: '/dsh-fojing-pet/work.json'"));
-check('网页也能读功课', hostSource.includes("work: '/api/dsh-fojing-pet.work'"));
+check('宿主有功课路由', hostSource.includes("work: '/dsh-lianjing/work.json'"));
+check('网页也能读功课', hostSource.includes("work: '/api/dsh-lianjing.work'"));
 check('靠 sessionQuery 读会话', hostSource.includes("ctx.inject?.(['sessionQuery']") && hostSource.includes('listSessions()'));
 check('在跑状态取自 agent 注册表', hostSource.includes("ctx.inject?.(['agents']") && hostSource.includes("status === 'running'"));
 check('子 agent 挂在父会话下', hostSource.includes('header.parentSession') && hostSource.includes('childCount'));
@@ -272,7 +272,7 @@ check('开工收工各抬眼一次', /before === 0 && workRunning > 0/.test(clie
 check('看功课时她只陪着，不盯屏幕', clientJs.includes("if (view === 'work' && open) return sprites.idle"));
 check('功课页勤拉，其余时候慢拉', clientJs.includes('5000 : 12000'));
 // 桌面壳读同一份 JSON：一个宿主实现，两个壳都只负责画
-check('壳也读同一份功课', shellSource.includes('/dsh-fojing-pet/work.json'));
+check('壳也读同一份功课', shellSource.includes('/dsh-lianjing/work.json'));
 check('壳的功课页也有 tab', shellSource.includes('Set-CardTab') && shellSource.includes('New-TabChip'));
 check('壳里点行也能展开', shellSource.includes('Render-Work') && shellSource.includes('New-WorkDetail'));
 check('壳里子任务也是三态', shellSource.includes("'◔'") && shellSource.includes("'○'"));
@@ -307,7 +307,7 @@ check('壳里的彩头也只剩字', shellSource.includes('#C69A4E') && shellSou
 check('壳里的小元件也不是橄榄', !shellSource.includes('CornerRadius 999') && shellSource.includes('CornerRadius 6'));
 
 console.log('壳里点行跳对话');
-check('宿主留了接力路由', hostSource.includes("open: '/dsh-fojing-pet/open'"));
+check('宿主留了接力路由', hostSource.includes("open: '/dsh-lianjing/open'"));
 check('接力收 id 但要挡住不像话的', hostSource.includes('会话 id 不像话') && hostSource.includes('pendingOpen'));
 check('快照把请求带给界面', hostSource.includes('pendingOpen: state.pendingOpen'));
 check('界面那侧真的去切会话', clientSource.includes('pendingOpen') && clientSource.includes('seenOpen'));
