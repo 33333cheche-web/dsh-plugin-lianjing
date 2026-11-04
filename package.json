@@ -1,18 +1,24 @@
 {
   "name": "dsh-plugin-fojing-pet",
-  "version": "1.5.0",
-  "description": "莲鲸 · 佛经学习桌宠：四部汉传佛经逐句学习（原文+释义+名相+练习），支持联网取经，桌面悬浮壳",
+  "version": "1.6.0",
+  "description": "莲鲸 · DSH 桌面桌宠：右下角一只在莲台上打坐的鲸鱼娘，帮你看住所有 agent——功课面板列出正在跑的会话、子任务进度、token 消耗和跑了多久，点一下能跳回对应对话；附送佛经逐句读、联网取经、点她敲木鱼攒彩头。网页浮层和 Windows 桌面悬浮壳两套，尺寸三档可缩。",
+  "icon": "./icon.png",
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
     "desktop-pet",
     "pet",
+    "agent-tree",
+    "session-monitor",
+    "token-usage",
     "buddhism",
     "sutra",
     "佛经",
     "心经",
     "莲鲸",
+    "桌宠",
+    "功课面板",
     "sutra-import",
     "取经"
   ],
@@ -22,18 +28,21 @@
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./icon": "./icon.png"
   },
   "files": [
     "index.js",
     "client.js",
     "online.js",
+    "icon.png",
     "cordis.patch.yml",
     "assets/",
     "corpus/",
     "skill/",
     "desktop/",
     "docs/",
+    "scripts/",
     "README.md"
   ],
   "scripts": {

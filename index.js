@@ -1075,12 +1075,27 @@ export function apply(ctx, config) {
     })();
     try {
       shellError = null;
+      // 别加 detached：Windows 上 detached + 无控制台会让 WPF 的 ShowDialog 立刻返回，
+      // 壳启动即静默退出（exit 0），界面看起来就是「点了没反应」。
+      let exitedEarly = false;
       shellChild = spawn('powershell.exe', [
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
         '-File', script, '-Origin', safeOrigin, '-AssetDir', assetsDir,
-      ], { detached: true, stdio: 'ignore', cwd: here });
-      shellChild.on('exit', () => { shellChild = null; });
+      ], { stdio: 'ignore', windowsHide: true, cwd: here });
+      shellChild.on('error', (error) => {
+        shellError = String(error?.message || error);
+        exitedEarly = true;
+        shellChild = null;
+      });
+      shellChild.on('exit', (code) => {
+        exitedEarly = true;
+        shellChild = null;
+        if (code) shellError = `悬浮壳退出了（code ${code}）`;
+      });
       shellChild.unref();
+      // 一秒内就退出，多半是脚本自己报错：把话说明白，别让按钮看起来没反应
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      if (exitedEarly) return { ok: false, ...shellStatus(), error: shellError || '悬浮壳启动后立刻退出了' };
       return { ok: true, ...shellStatus() };
     } catch (error) {
       shellError = String(error?.message || error);

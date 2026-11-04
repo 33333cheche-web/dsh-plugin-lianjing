@@ -41,6 +41,28 @@ $WorkCardHeight = 620
 $OpenPetHeight = 210
 $WindowWidth = 448
 
+# --- 尺寸档位 -----------------------------------------------------------------
+# 整只宠物（立绘 + 飘字层 + 底部标签 + 右上角那枚光点）按同一比例缩：
+# 大 = 100%（就是原来的尺寸）、中 = 80%、小 = 62%。
+# 用 LayoutTransform 而不是 RenderTransform：它参与测量，Fit-WindowHeight 会自动跟着变。
+# 它是绕左上角缩的 —— 所以 $petGroup 必须 HorizontalAlignment=Center、按内容定宽，
+# 让缩放后的布局槽正好等于内容宽度，居中的事交给父容器，否则整只宠物会往左偏。
+$SizePresets = [ordered]@{
+  'large'  = 1.00
+  'medium' = 0.80
+  'small'  = 0.62
+}
+$SizeLabels = [ordered]@{ 'large' = '大'; 'medium' = '中'; 'small' = '小' }
+$script:SizePreset = 'large'
+$script:PetScale = 1.0
+$script:SizeChips = @{}
+# 桌面壳的偏好没有宿主侧存档（网页那只记在 localStorage），所以壳自己记这一个值：
+# %LOCALAPPDATA%\dsh-fojing-pet\pet-shell.json，只放 sizePreset；读不到或坏了就当「大」。
+$PetStatePath = ''
+try {
+  if ($env:LOCALAPPDATA) { $PetStatePath = Join-Path (Join-Path $env:LOCALAPPDATA 'dsh-fojing-pet') 'pet-shell.json' }
+} catch { $PetStatePath = '' }
+
 # --- 样式 -------------------------------------------------------------------
 $Ink      = '#33555A'
 $InkSoft  = '#485C58'
@@ -436,6 +458,106 @@ $txtLabelTerms = New-Text -Text '名相' -Size 9.5 -Color $Accent -Weight 'Bold'
 $termsPanel = New-Object System.Windows.Controls.StackPanel
 $termsPanel.Margin = (New-Thickness '0,0,0,10')
 
+# --- 尺寸档位：小方块与切换 ---------------------------------------------------
+# 三颗小方块（不是胶囊）：圆角 6、纸底、1px #E2D3B6 描边、深色字；当前档换淡青底 + 青描边。
+function Set-SizeChipLook {
+  param($Chip, [string]$Name)
+  if (-not $Chip) { return }
+  $active = ($script:SizePreset -eq $Name)
+  if ($active) {
+    $Chip.Background = New-Brush '#EAF2ED'
+    $Chip.BorderBrush = New-Brush '#8CB7AF'
+  } else {
+    $Chip.Background = New-Brush '#FFFBF2'
+    $Chip.BorderBrush = New-Brush '#E2D3B6'
+  }
+  $tb = $Chip.Child
+  if ($tb) {
+    $color = '#7A6A4E'
+    $weight = 'Normal'
+    if ($active) { $color = '#2F5D55'; $weight = 'Bold' }
+    $tb.Foreground = New-Brush $color
+    $tb.FontWeight = ConvertTo-FontWeight $weight
+  }
+}
+
+function New-SizeChip {
+  param([string]$Name, [string]$Label)
+  $chip = New-Object System.Windows.Controls.Border
+  $chip.CornerRadius = New-Object System.Windows.CornerRadius 6
+  $chip.BorderThickness = New-Object System.Windows.Thickness 1
+  $chip.Padding = New-Thickness '9,2,9,3'
+  $chip.Margin = New-Thickness '4,0,0,0'
+  $chip.Cursor = [System.Windows.Input.Cursors]::Hand
+  $chip.Tag = $Name
+  $chip.Child = (New-Text -Text $Label -Size 10 -Color '#7A6A4E' -Weight 'Normal')
+  $script:SizeChips[$Name] = $chip
+  Set-SizeChipLook -Chip $chip -Name $Name
+  # 和 tab / 经书胶囊一样用 Preview（隧道）事件，别被外层吃掉
+  $chip.Add_PreviewMouseLeftButtonUp({
+      try {
+        $name = [string]$this.Tag
+        if ($name) {
+          Apply-PetSize $name
+          Save-SizePreset $name
+        }
+      } catch { }
+    })
+  return $chip
+}
+
+function Update-SizeChips {
+  foreach ($key in $SizePresets.Keys) {
+    Set-SizeChipLook -Chip $script:SizeChips[$key] -Name $key
+  }
+}
+
+function Read-SizePreset {
+  try {
+    if (-not $PetStatePath -or -not (Test-Path $PetStatePath)) { return 'large' }
+    $raw = [IO.File]::ReadAllText($PetStatePath)
+    if (-not $raw -or -not $raw.Trim()) { return 'large' }
+    $saved = [string]($raw | ConvertFrom-Json).sizePreset
+    if ($SizePresets.Contains($saved)) { return $saved }
+  } catch { }
+  return 'large'
+}
+
+function Save-SizePreset {
+  param([string]$Name)
+  try {
+    if (-not $PetStatePath) { return }
+    $dir = [IO.Path]::GetDirectoryName($PetStatePath)
+    if ($dir -and -not (Test-Path $dir)) { [void][IO.Directory]::CreateDirectory($dir) }
+    $payload = @{ sizePreset = $Name } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText($PetStatePath, $payload, (New-Object System.Text.UTF8Encoding($false)))
+  } catch { }
+}
+
+function Apply-PetSize {
+  param([string]$Name)
+  if (-not $Name -or -not $SizePresets.Contains($Name)) { $Name = 'large' }
+  $script:SizePreset = $Name
+  $script:PetScale = [double]$SizePresets[$Name]
+  try {
+    $script:PetScaleTx.ScaleX = $script:PetScale
+    $script:PetScaleTx.ScaleY = $script:PetScale
+  } catch { }
+  Update-SizeChips
+  # 窗口高度就是内容高度：缩小后要跟着收（否则上面留一块看不见的透明窗），
+  # 放大后也可能顶出屏幕 —— Fit-WindowHeight 会贴回底边并夹进工作区，这里再兜一次左右。
+  try {
+    $window.UpdateLayout()
+    Fit-WindowHeight
+    $wa = Get-WindowWorkArea
+    $w = $window.Width
+    $h = $window.Height
+    if (($window.Left + $w) -gt $wa.Right) { $window.Left = $wa.Right - $w }
+    if ($window.Left -lt $wa.Left) { $window.Left = $wa.Left }
+    if (($window.Top + $h) -gt $wa.Bottom) { $window.Top = $wa.Bottom - $h }
+    if ($window.Top -lt $wa.Top) { $window.Top = $wa.Top }
+  } catch { }
+}
 $btnRow = New-Object System.Windows.Controls.StackPanel
 $btnRow.Orientation = 'Horizontal'
 $btnRow.HorizontalAlignment = 'Right'
@@ -463,6 +585,30 @@ $btnRow.Children.Add($btnRefresh) | Out-Null
 $btnRow.Children.Add($btnMore) | Out-Null
 $btnRow.Children.Add($btnClose) | Out-Null
 $btnRow.Children.Add($btnNext) | Out-Null
+# 尺寸档和操作按钮排同一行：左边「尺寸 大 中 小」，右边还是原来的刷新/收起/再读一句。
+# 一块 Grid 分两列，别挤成一串。
+$sizeRow = New-Object System.Windows.Controls.StackPanel
+$sizeRow.Orientation = 'Horizontal'
+$sizeRow.HorizontalAlignment = 'Left'
+$sizeRow.VerticalAlignment = 'Center'
+$sizeLabel = New-Text -Text '尺寸' -Size 9.5 -Color '#A08A68' -Weight 'Bold' -Margin '2,0,0,0'
+$sizeLabel.VerticalAlignment = 'Center'
+$sizeRow.Children.Add($sizeLabel) | Out-Null
+foreach ($sizeKey in $SizePresets.Keys) {
+  $sizeRow.Children.Add((New-SizeChip -Name $sizeKey -Label $SizeLabels[$sizeKey])) | Out-Null
+}
+
+$footActionRow = New-Object System.Windows.Controls.Grid
+$faCol0 = New-Object System.Windows.Controls.ColumnDefinition
+$faCol0.Width = New-Object System.Windows.GridLength 1, 'Star'
+$faCol1 = New-Object System.Windows.Controls.ColumnDefinition
+$faCol1.Width = [System.Windows.GridLength]::Auto
+[void]$footActionRow.ColumnDefinitions.Add($faCol0)
+[void]$footActionRow.ColumnDefinitions.Add($faCol1)
+[System.Windows.Controls.Grid]::SetColumn($sizeRow, 0)
+[System.Windows.Controls.Grid]::SetColumn($btnRow, 1)
+$footActionRow.Children.Add($sizeRow) | Out-Null
+$footActionRow.Children.Add($btnRow) | Out-Null
 
 $txtStatus = New-Text -Text '' -Size 9 -Color '#C07D6F' -Margin '0,6,0,0'
 
@@ -525,7 +671,7 @@ $cardPanel.Children.Add($tabBar) | Out-Null
 $cardPanel.Children.Add($readPanel) | Out-Null
 $cardPanel.Children.Add($workPanel) | Out-Null
 
-$footPanel.Children.Add($btnRow) | Out-Null
+$footPanel.Children.Add($footActionRow) | Out-Null
 $footPanel.Children.Add($txtStatus) | Out-Null
 [System.Windows.Controls.Grid]::SetRow($footBorder, 1)
 $cardShell.Children.Add($footBorder) | Out-Null
@@ -555,20 +701,74 @@ $floatLayer = New-Object System.Windows.Controls.Canvas
 $floatLayer.IsHitTestVisible = $false
 $petHost.Children.Add($floatLayer) | Out-Null
 
-$badge = New-Object System.Windows.Controls.Border
-$badge.CornerRadius = New-Object System.Windows.CornerRadius 9
-$badge.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($Accent)))
+# 右上角「灵感」光点：不再写数字，改成一团会呼吸的淡金光；点它 = 展开/收起卡片。
+$badge = New-Object System.Windows.Controls.Grid
+$badge.Width = 30
+$badge.Height = 30
 $badge.HorizontalAlignment = 'Right'
 $badge.VerticalAlignment = 'Top'
-$badge.Margin = New-Object System.Windows.Thickness 0, 6, 6, 0
-$badge.Padding = New-Object System.Windows.Thickness 5, 0, 5, 0
-$badge.Visibility = 'Collapsed'
-$badgeText = New-Text -Text '1' -Size 10 -Color '#FFFDF5' -Weight 'Bold'
-$badgeText.HorizontalAlignment = 'Center'
-$badge.Child = $badgeText
+# 往内收一截：离上边 16、离右边 10（原来是 6/6，贴角显得占地）
+$badge.Margin = New-Object System.Windows.Thickness 0, 16, 10, 0
+$badge.Background = [System.Windows.Media.Brushes]::Transparent
+$badge.Cursor = [System.Windows.Input.Cursors]::Hand
+
+# 光晕：径向渐变 + 透明度/直径呼吸（约 2.2 秒一个来回）
+$badgeGlow = New-Object System.Windows.Shapes.Ellipse
+$badgeGlow.Width = 34
+$badgeGlow.Height = 34
+$badgeGlow.HorizontalAlignment = 'Center'
+$badgeGlow.VerticalAlignment = 'Center'
+$badgeGlow.RenderTransformOrigin = New-Object System.Windows.Point 0.5, 0.5
+$badgeGlowScale = New-Object System.Windows.Media.ScaleTransform 1.0, 1.0
+$badgeGlow.RenderTransform = $badgeGlowScale
+$badgeGlowBrush = New-Object System.Windows.Media.RadialGradientBrush
+$badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#AFF6E0A8'), 0.0)))
+$badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#4AEFD08E'), 0.45)))
+$badgeGlowBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#00F2D79B'), 1.0)))
+$badgeGlow.Fill = $badgeGlowBrush
+$badge.Children.Add($badgeGlow) | Out-Null
+
+# 芯：14 DIP 暖白到淡金的小圆点，不带数字
+$badgeCore = New-Object System.Windows.Shapes.Ellipse
+$badgeCore.Width = 14
+$badgeCore.Height = 14
+$badgeCore.HorizontalAlignment = 'Center'
+$badgeCore.VerticalAlignment = 'Center'
+$badgeCoreBrush = New-Object System.Windows.Media.RadialGradientBrush
+$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFFFFCF2'), 0.0)))
+$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFF7E4B8'), 0.62)))
+$badgeCoreBrush.GradientStops.Add((New-Object System.Windows.Media.GradientStop ([System.Windows.Media.Color][System.Windows.Media.ColorConverter]::ConvertFromString('#FFE7C887'), 1.0)))
+$badgeCore.Fill = $badgeCoreBrush
+$badge.Children.Add($badgeCore) | Out-Null
 $petHost.Children.Add($badge) | Out-Null
 
-$stack.Children.Add($petHost) | Out-Null
+# 呼吸动画：光晕透明度 0.20 <-> 0.95、直径 0.92 <-> 1.12；AutoReverse + Forever
+$badgeBreath = New-Object System.Windows.Media.Animation.DoubleAnimation
+$badgeBreath.From = 0.20
+$badgeBreath.To = 0.95
+$badgeBreath.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(1100))
+$badgeBreath.AutoReverse = $true
+$badgeBreath.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
+$badgeGlow.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $badgeBreath)
+$badgeScale = New-Object System.Windows.Media.Animation.DoubleAnimation
+$badgeScale.From = 0.92
+$badgeScale.To = 1.12
+$badgeScale.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(1100))
+$badgeScale.AutoReverse = $true
+$badgeScale.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
+$badgeGlowScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleXProperty, $badgeScale)
+$badgeGlowScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $badgeScale)
+
+# 立绘 + 飘字层 + 光点 + 底部标签一起包进 $petGroup：尺寸档位只在它身上挂一个
+# LayoutTransform，四块按同一比例缩，连它们之间的间距也一起缩。
+# HorizontalAlignment=Center + 按内容定宽：LayoutTransform 绕左上角缩放，
+# 只有布局槽等于缩放后的宽度、居中交给父容器，整只宠物才不会往左偏。
+$petGroup = New-Object System.Windows.Controls.StackPanel
+$petGroup.HorizontalAlignment = 'Center'
+$script:PetScaleTx = New-Object System.Windows.Media.ScaleTransform 1.0, 1.0
+$petGroup.LayoutTransform = $script:PetScaleTx
+$petGroup.Children.Add($petHost) | Out-Null
+$stack.Children.Add($petGroup) | Out-Null
 
 # 立绘下面的小标签：跟网页里的 .fj-tag 同一套语义（状态点 + 一行字）。
 # 有功课在跑时改成「N 个在跑」；否则保持原来的说法：静坐中 / 翻经中 / MM:SS 后再读。
@@ -595,7 +795,7 @@ $tagLine.Children.Add($tagDot) | Out-Null
 $tagLine.Children.Add($tagText) | Out-Null
 $tagBorder.Child = $tagLine
 
-# 小标签一行：状态标签 + 「已敲 N 下」（敲过才出现）
+# 小标签一行：状态标签 + 「已积功德 N」（只要拿到数据就常显，没敲过显示 0）
 $tagRow = New-Object System.Windows.Controls.StackPanel
 $tagRow.Orientation = 'Horizontal'
 $tagRow.HorizontalAlignment = 'Center'
@@ -608,13 +808,13 @@ $knockBorder.BorderThickness = New-Object System.Windows.Thickness 1
 $knockBorder.BorderBrush = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#E2D3B6')))
 $knockBorder.Padding = New-Object System.Windows.Thickness 9, 2, 9, 3
 $knockBorder.Margin = New-Object System.Windows.Thickness 6, 3, 0, 2
-$knockBorder.Visibility = 'Collapsed'
+$knockBorder.Visibility = 'Visible'
 $knockText = New-Text -Text '已积功德 0' -Size 10 -Color '#7A6A4E' -Weight 'Bold'
 $knockText.VerticalAlignment = 'Center'
 $knockBorder.Child = $knockText
 $tagRow.Children.Add($knockBorder) | Out-Null
 
-$stack.Children.Add($tagRow) | Out-Null
+$petGroup.Children.Add($tagRow) | Out-Null
 
 # --- 状态 -------------------------------------------------------------------
 $script:State = $null
@@ -688,7 +888,9 @@ function Update-PetImage {
 function Set-CardSize {
   param([bool]$open)
   $petH = if ($open) { $OpenPetHeight } else { $PetHeight }
-  $height = if ($open) { $CardHeight + $OpenPetHeight + 40 } else { $PetHeight + 40 }
+  # 尺寸档缩的是 LayoutTransform：这里按比例先估窗口高度，随后 Fit-WindowHeight 再精确修
+  $scaledPet = [int][Math]::Ceiling($petH * $script:PetScale)
+  $height = if ($open) { $CardHeight + $scaledPet + 40 } else { $scaledPet + 40 }
   # 展开时把立绘缩小，把省下的纵向空间让给经文与释义
   $petImage.Height = $petH
   $petImage.Width = [int]($petH * 0.96)
@@ -731,7 +933,7 @@ function Fit-WindowHeight {
   $wa = Get-WindowWorkArea
   $available = $wa.Bottom - $wa.Top
   $need = [Math]::Ceiling($stack.ActualHeight) + 4
-  $floor = $PetHeight + 20
+  $floor = [int][Math]::Ceiling($PetHeight * $script:PetScale) + 20
   $target = [Math]::Max($floor, [Math]::Min($need, $available))
   $bottom = $window.Top + $window.Height
   $window.Height = $target
@@ -885,13 +1087,9 @@ function Refresh-State {
     $script:State = Invoke-PetApi -Url $StateUrl
     $txtStatus.Text = ''
     if (-not $script:ShowingStudy) { Render-Card }
-    if ($script:State.unread -gt 0) {
-      $badge.Visibility = 'Visible'
-      $badgeText.Text = [string]$script:State.unread
-      if ($script:State.unread -gt 9) { $badgeText.Text = '9+' }
-    } else {
-      $badge.Visibility = 'Collapsed'
-    }
+    # 光点不消失：有未读亮一点，没未读暗一点（它同时也是展开卡片的入口）
+    $badge.Opacity = 0.60
+    if ($script:State.unread -gt 0) { $badge.Opacity = 1.0 }
     Update-PetImage
     Update-KnockCount
     Request-KnockSprite
@@ -1111,13 +1309,9 @@ function Update-WorkNote {
 
 function Update-KnockCount {
   try {
-    $total = Get-MuyuTotal
-    if ($total -gt 0) {
-      $knockText.Text = ('已积功德 {0}' -f $total)
-      $knockBorder.Visibility = 'Visible'
-    } else {
-      $knockBorder.Visibility = 'Collapsed'
-    }
+    # 只要拿到过数据就常显：没敲过也显示「已积功德 0」，不再时有时无
+    $knockText.Text = ('已积功德 {0}' -f (Get-MuyuTotal))
+    $knockBorder.Visibility = 'Visible'
     Update-WorkNote
   } catch { }
 }
@@ -1395,6 +1589,7 @@ function Update-PetTag {
     }
   }
   $tagDot.Fill = New-Brush $dotColor
+  Update-KnockCount
 }
 
 # --- 功课：tab 与卡片两页 -----------------------------------------------------
@@ -1449,7 +1644,7 @@ function Set-CardTab {
     # 否则窗口高度被工作区卡住、卡片顶部会被切掉（这个项目以前踩过）。
     $wa = Get-WindowWorkArea
     $avail = $wa.Bottom - $wa.Top
-    $limit = [Math]::Min($WorkCardHeight, $avail - $OpenPetHeight - 90)
+    $limit = [Math]::Min($WorkCardHeight, $avail - [Math]::Ceiling($OpenPetHeight * $script:PetScale) - 90)
     if ($limit -lt 300) { $limit = 300 }
     $cardBorder.MaxHeight = $limit
     $script:WorkSignature = Get-WorkSignature
@@ -2068,6 +2263,7 @@ $tagBorder.Cursor = [System.Windows.Input.Cursors]::Hand
 $knockBorder.Cursor = [System.Windows.Input.Cursors]::Hand
 $tagBorder.Add_MouseLeftButtonUp({ try { Toggle-Card } catch { } })
 $knockBorder.Add_MouseLeftButtonUp({ try { Toggle-Card } catch { } })
+$badge.Add_MouseLeftButtonUp({ try { Toggle-Card } catch { } })
 
 $btnClose.Add_Click({ Toggle-Card })
 $btnNext.Add_Click({ Invoke-Next })
@@ -2169,6 +2365,8 @@ $timer.Add_Tick({
 $timer.Start()
 
 $window.Add_Loaded({
+    # 先把上次的尺寸档读回来并落位，再按新的窗口高度找右下角（否则会按大档的高度飘一下）
+    Apply-PetSize (Read-SizePreset)
     # 落到「鼠标所在那块屏」的右下角：用户刚点完按钮，光标就在他眼前那块屏上。
     Reset-PetPosition
     Set-PetImage 'idle'

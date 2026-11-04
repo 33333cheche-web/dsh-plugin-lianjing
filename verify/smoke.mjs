@@ -298,6 +298,15 @@ check('彩头是咖金纯字、不留底板', clientJs.includes('color:#c69a4e')
 check('壳里的彩头也只剩字', shellSource.includes('#C69A4E') && shellSource.includes('Inlines.Add($runAmount)'));
 check('壳里的小元件也不是橄榄', !shellSource.includes('CornerRadius 999') && shellSource.includes('CornerRadius 6'));
 
+console.log('清单与启动');
+const pluginJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+check('清单给她自己的形象当图标', pluginJson.icon === './icon.png' && (await readFile(join(root, 'icon.png'))).length > 1024);
+check('清单图标随包发布', pluginJson.files.includes('icon.png'));
+check('简介说的是桌宠不是学经工具', pluginJson.description.includes('桌宠') && pluginJson.description.includes('agent'));
+check('功课每行带 session id 好跳转', hostSource.includes('short: id.replace'));
+// 2026-11-04 回归：detached 起来壳会「启动即退出」，界面看着像点了没反应
+check('拉起悬浮壳不用 detached', hostSource.includes('windowsHide: true') && !hostSource.includes('detached: true'));
+check('壳起不来要报错不要装没事', hostSource.includes('启动后立刻退出'));
 console.log('');
 if (failures) {
   console.log(`失败 ${failures} 项`);
