@@ -473,10 +473,9 @@ window.__ModuleLoader__.load({
         try { window.console?.info?.('[莲鲸·木鱼]', event, detail || ''); } catch { /* 没 console 就算了 */ }
       };
 
-      // 一记「梆」：木鱼是空心木块，不是铃。三路叠：
-      //   ① 主体 300Hz + 474Hz（非整数倍，成对微失谐 → 打拍子出木头味），敲下先高后落
-      //   ② 132Hz 的低频闷响给重量   ③ 1.8k 带通的 25ms 噪声当木槌
-      // 只在 wav 放不出来时才走到这里；音量压在 0.28，不炸。
+      // 一记「梆」：和随包的 assets/muyu.wav 同一套配方——
+      // 618Hz 主体（52ms）、1265Hz 眨眼的高频（19ms）、315Hz 低腔（85ms），
+      // 外加 4ms 噪声当木槌。只在 wav 放不出来时才走到这里。
       const synthKnock = (reason) => {
         if (muted.current) { traceSound('muted', reason); return 'muted'; }
         try {
@@ -487,37 +486,31 @@ window.__ModuleLoader__.load({
           if (context.state === 'suspended') void context.resume?.().catch(() => {});
           const t0 = context.currentTime + 0.002;
           const parts = [
-            { type: 'triangle', hz: 300, bend: 0.94, gain: 0.26, decay: 0.20 },
-            { type: 'sine', hz: 474, bend: 0.94, gain: 0.13, decay: 0.13 },
-            { type: 'sine', hz: 132, bend: 0.99, gain: 0.16, decay: 0.11 },
+            { type: 'sine', hz: 618, gain: 0.24, decay: 0.052 },
+            { type: 'sine', hz: 1265, gain: 0.09, decay: 0.019 },
+            { type: 'sine', hz: 315, gain: 0.07, decay: 0.085 },
           ];
           for (const part of parts) {
             const osc = context.createOscillator();
             const gain = context.createGain();
             osc.type = part.type;
             osc.frequency.setValueAtTime(part.hz, t0);
-            osc.frequency.exponentialRampToValueAtTime(part.hz * part.bend, t0 + 0.05);
             gain.gain.setValueAtTime(0.0001, t0);
-            gain.gain.exponentialRampToValueAtTime(part.gain, t0 + 0.005);
+            gain.gain.exponentialRampToValueAtTime(part.gain, t0 + 0.004);
             gain.gain.exponentialRampToValueAtTime(0.0001, t0 + part.decay);
             osc.connect(gain).connect(context.destination);
             osc.start(t0);
             osc.stop(t0 + part.decay + 0.02);
           }
-          const length = Math.max(1, Math.floor(context.sampleRate * 0.025));
+          const length = Math.max(1, Math.floor(context.sampleRate * 0.004));
           const buffer = context.createBuffer(1, length, context.sampleRate);
           const data = buffer.getChannelData(0);
-          for (let i = 0; i < length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 3;
+          for (let i = 0; i < length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 2;
           const noise = context.createBufferSource();
           const noiseGain = context.createGain();
-          noiseGain.gain.value = 0.09;
-          // 木头把槌击滤成 1.8k 附近的共振峰，不然就是一记白噪声「嘶」
-          const woodFilter = context.createBiquadFilter();
-          woodFilter.type = 'bandpass';
-          woodFilter.frequency.value = 1800;
-          woodFilter.Q.value = 1.2;
+          noiseGain.gain.value = 0.12;
           noise.buffer = buffer;
-          noise.connect(woodFilter).connect(noiseGain).connect(context.destination);
+          noise.connect(noiseGain).connect(context.destination);
           noise.start(t0);
           traceSound('synth', reason);
           return 'synth';
