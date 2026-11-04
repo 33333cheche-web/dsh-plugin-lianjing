@@ -674,7 +674,7 @@ export function apply(ctx, config) {
   ctx.inject?.(['agents'], (scope) => { agentRegistry = scope.agents; });
 
   const WORK = {
-    roots: 6,        // 面板最多列几个「项目」
+    roots: 8,        // 面板最多列几个会话（界面按项目归成树，多留两个给同一项目下的活儿）
     children: 3,     // 每个项目最多带几个子 agent
     todos: 12,       // 每个项目最多带几条子任务
     ttl: 2500,       // 整份快照的缓存时长（客户端约 5s 拉一次）

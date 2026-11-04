@@ -239,7 +239,6 @@ window.__ModuleLoader__.load({
       .fj-work-top{display:flex;align-items:center;gap:6px}
       .fj-work-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#c9bda6}
       .fj-work-dot[data-run="on"]{background:#d9a13c;animation:fj-pulse 1.5s ease-in-out infinite}
-      .fj-work-name{flex:0 0 auto;max-width:96px;font-size:11px;font-weight:800;color:#6a5333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .fj-work-title{flex:1;min-width:0;font-size:10px;color:#8a7452;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .fj-work-meta{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:10px;color:#9b866a}
       .fj-work-bar{flex:0 1 58px;min-width:22px;height:3px;border-radius:2px;background:rgba(190,170,135,.3);overflow:hidden}
@@ -258,6 +257,29 @@ window.__ModuleLoader__.load({
       .fj-work-kid{display:flex;align-items:center;gap:5px}
       .fj-work-kid span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .fj-work-empty{margin:2px 0 4px;padding:12px 0;text-align:center;font-size:11px;color:#a08d70}
+      /* ---- 按项目收成树：项目行是一层，会话行缩进挂在一条竖线下 ---- */
+      .fj-proj{display:flex;flex-direction:column;margin-top:1px}
+      .fj-proj-row{display:flex;align-items:center;gap:6px;width:100%;height:26px;padding:0 3px;
+        border:0;border-radius:7px;background:none;text-align:left;font:inherit;color:#6a5333;cursor:pointer;transition:background .15s}
+      .fj-proj-row:hover{background:rgba(255,253,246,.9)}
+      .fj-proj-row:focus-visible{outline:2px solid #a9c8bf;outline-offset:1px}
+      .fj-proj-dot{flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:#c9bda6}
+      .fj-proj-dot[data-run="on"]{background:#d9a13c;animation:fj-pulse 1.5s ease-in-out infinite}
+      .fj-proj-name{flex:0 1 auto;min-width:0;max-width:148px;font-size:11px;font-weight:800;color:#6a5333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .fj-proj-count{flex:0 0 auto;font-size:10px;color:#9b866a}
+      .fj-proj-run{flex:0 0 auto;font-size:10px;color:#5f8a6a}
+      .fj-proj-sum{flex:0 0 auto;margin-left:auto;font-size:10px;color:#9b866a;font-variant-numeric:tabular-nums;white-space:nowrap}
+      .fj-proj-ago{flex:0 0 auto;margin-left:8px;font-size:10px;color:#9b866a;font-variant-numeric:tabular-nums;white-space:nowrap}
+      .fj-proj-caret{flex:0 0 9px;width:9px;font-style:normal;font-size:9px;line-height:1;color:#b9a98c;text-align:right}
+      /* 竖线按「行」画：每行自己带一段，最后一行只画到横枝，这里不用遮罩去盖背景 */
+      .fj-spine{display:flex;flex-direction:column;gap:5px;margin:1px 0 3px 16px}
+      .fj-spine-item{position:relative;padding-left:13px}
+      .fj-spine-item::before{content:'';position:absolute;left:0;top:-5px;bottom:-5px;width:1px;background:rgba(190,170,135,.55)}
+      .fj-spine-item:first-child::before{top:0}
+      .fj-spine-item:last-child::before{bottom:auto;height:20px}
+      /* 一组只有一个会话时，竖线 0 起 15 落，正好和横枝接上，不留尾巴 */
+      .fj-spine-item:first-child:last-child::before{top:0;height:15px}
+      .fj-spine-item::after{content:'';position:absolute;left:0;top:15px;width:6px;height:1px;background:rgba(190,170,135,.55)}
       /* 详情区底下那颗「去 DSH 里打开」——是链接不是按钮（外层行本身是个 button，别嵌套） */
       .fj-work-jump{display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:3px 9px;border:1px solid rgba(140,183,175,.55);
         border-radius:6px;background:rgba(140,183,175,.1);color:#4c7069;font-size:10px;font-weight:800;letter-spacing:.02em;cursor:pointer}
@@ -408,6 +430,7 @@ window.__ModuleLoader__.load({
       const [work, setWork] = useState(null);
       const [workError, setWorkError] = useState(false);
       const [workOpen, setWorkOpen] = useState('');
+      const [projClosed, setProjClosed] = useState({});   // {项目名: true} = 这一组收起，默认全展开
       const [knocks, setKnocks] = useState([]);
       const [knocking, setKnocking] = useState(false);
       const [meritCount, setMeritCount] = useState(0);
@@ -1158,7 +1181,6 @@ window.__ModuleLoader__.load({
           },
           h('div', { className: 'fj-work-top' },
             h('i', { className: 'fj-work-dot', 'data-run': item.running ? 'on' : 'off' }),
-            h('span', { className: 'fj-work-name' }, item.project || item.short),
             h('span', { className: 'fj-work-title' }, item.title || '（没有标题）')),
           h('div', { className: 'fj-work-meta' },
             item.todos.total > 0 ? h('span', { className: 'fj-work-num' }, `${item.todos.done}/${item.todos.total}`) : null,
@@ -1167,6 +1189,59 @@ window.__ModuleLoader__.load({
             h('span', { className: 'fj-work-num' },
               item.running ? fmtWork(item.durationMs) : fmtAgo(item.idleMs)))),
           expanded ? workDetail(item) : null);
+      };
+
+      // 客户端分组：宿主只给扁平的 sessions，project 就是 cwd 目录名。
+      // 组内：在跑的排前，再按 lastPromptAt 倒序；组间：有在跑的组优先，再按组内最近活动倒序。
+      const groupSessions = (sessions) => {
+        const buckets = new Map();
+        for (const item of sessions) {
+          const key = String(item.project || item.short || '未归类').trim() || '未归类';
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(item);
+        }
+        const stamp = (item) => Number(item.lastPromptAt) || 0;
+        const groups = [];
+        for (const [key, items] of buckets) {
+          const ordered = items.slice().sort((a, b) => (b.running ? 1 : 0) - (a.running ? 1 : 0) || stamp(b) - stamp(a));
+          groups.push({
+            key,
+            items: ordered,
+            running: ordered.filter((item) => item.running).length,
+            tokens: ordered.reduce((sum, item) => sum + (Number(item.tokens?.total) || 0), 0),
+            latest: Math.max(0, ...ordered.map(stamp)),
+            // 时间兜底：老会话可能没有 lastPromptAt，就退回组内最小 idleMs（缺字段的不算 0）
+            idle: (() => { const list = ordered.map((item) => Number(item.idleMs)).filter((value) => Number.isFinite(value) && value >= 0); return list.length ? Math.min(...list) : 0; })(),
+          });
+        }
+        groups.sort((a, b) => (b.running > 0 ? 1 : 0) - (a.running > 0 ? 1 : 0) || b.latest - a.latest);
+        return groups;
+      };
+
+      const projRow = (group) => {
+        const closed = Boolean(projClosed[group.key]);
+        // 时间取组内最近的一次活动：有 lastPromptAt 就按它算，没有就退回最小的 idleMs
+        const ago = group.latest > 0 ? Math.max(0, Date.now() - group.latest) : group.idle;
+        return h('div', { key: group.key, className: 'fj-proj' },
+          h('button', {
+            type: 'button',
+            className: 'fj-proj-row',
+            'data-closed': closed ? 'on' : 'off',
+            'aria-expanded': closed ? 'false' : 'true',
+            title: closed ? `展开「${group.key}」的 ${group.items.length} 个会话` : `收起「${group.key}」`,
+            onClick: () => setProjClosed((prev) => ({ ...prev, [group.key]: !prev[group.key] })),
+          },
+          h('i', { className: 'fj-proj-dot', 'data-run': group.running > 0 ? 'on' : 'off' }),
+          h('span', { className: 'fj-proj-name' }, group.key),
+          h('span', { className: 'fj-proj-count' }, `${group.items.length} 个`),
+          group.running > 0 ? h('span', { className: 'fj-proj-run' }, `· ${group.running} 个在跑`) : null,
+          h('span', { className: 'fj-proj-sum' }, `合计 ${fmtTokens(group.tokens)}`),
+          h('span', { className: 'fj-proj-ago' }, fmtAgo(ago)),
+          h('i', { className: 'fj-proj-caret', 'aria-hidden': true }, closed ? '▸' : '▾')),
+          closed ? null : h('div', { className: 'fj-spine' }, group.items.map((item) => h('div', {
+            key: item.id,
+            className: 'fj-spine-item',
+          }, workRow(item)))));
       };
 
       const workView = () => {
@@ -1183,7 +1258,7 @@ window.__ModuleLoader__.load({
               h('span', null, work?.totalSessions ? `共 ${Number(work.totalSessions)} 个会话` : ''),
               h('span', { style: { marginLeft: 'auto' } }, workError ? '宿主没连上' : '刚刚')),
             sessions.length > 0
-              ? h('div', { className: 'fj-work-list' }, sessions.map(workRow))
+              ? h('div', { className: 'fj-work-list' }, groupSessions(sessions).map(projRow))
               : h('p', { className: 'fj-work-empty' },
                 workError ? '读不到功课，宿主那边可能还没重开' : '今日无功课'),
             h('div', { className: 'fj-foot' },

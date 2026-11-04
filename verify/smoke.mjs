@@ -256,7 +256,12 @@ check('token 只报全会话累计', hostSource.includes('cacheReadTokens') && !
 check('老会话缺字段也不炸', hostSource.includes('catch { values = {}; }'));
 // 功课页：多会话列表，点一行展开子任务
 check('卡片有两个 tab', clientJs.includes('fj-tabs') && clientJs.includes("setView('work')"));
-check('功课页列多会话', clientJs.includes('fj-work-list') && clientJs.includes('sessions.map(workRow)'));
+// 功课页：同一项目的会话收成一个项目节点（客户端分组，宿主只给扁平的 sessions）
+check('功课页按项目收成树', clientJs.includes('fj-work-list') && clientJs.includes('groupSessions(sessions).map(projRow)')
+  && clientJs.includes('fj-proj-row') && clientJs.includes('fj-spine-item'));
+check('组默认全展开，点项目行才收', clientJs.includes('useState({})') && clientJs.includes('projClosed[group.key]') && clientJs.includes('data-closed'));
+check('组内 token 求和、时间取最近', clientJs.includes('sum + (Number(item.tokens?.total) || 0)') && clientJs.includes('Math.max(0, ...ordered.map(stamp))'));
+check('扣掉子行里的项目名', !clientJs.includes('fj-work-name'));
 check('点一行展开子任务', clientJs.includes('fj-work-open') && clientJs.includes('workOpen'));
 check('子任务三态有记号', clientJs.includes("'✓'") && clientJs.includes("'◔'") && clientJs.includes("'○'"));
 check('数字用万/亿，不摆原始位数', clientJs.includes('1e8') && clientJs.includes('1e4'));

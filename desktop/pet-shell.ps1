@@ -936,6 +936,7 @@ $script:CardTab = 'work'         # work | read（功课是默认页，tab 排在
 $script:WorkData = $null         # 最近一次成功拉到的 work.json
 $script:WorkFailed = $false      # 上一拍失败（有旧数据就继续用旧的）
 $script:WorkOpenId = ''          # 展开的那一行（同一时间只展开一行）
+$script:ClosedProjects = @{}     # 收起的项目组（键=项目名）。数据每 5 秒重建行时不清掉，折叠状态要活着
 $script:WorkPending = $null      # 飞行中的异步请求
 $script:WorkRunspace = $null     # 复用的后台 runspace：网络请求不在 UI 线程上跑
 $script:WorkSignature = ''       # 数据指纹：没变就不重建行，免得每 5 秒闪一下
@@ -2084,6 +2085,185 @@ function New-WorkDetail {
   return $box
 }
 
+# --- 功课：按项目归成树 -------------------------------------------------------
+# 同一个 project（cwd 目录名）下的多个会话收成一个项目节点：父行是项目，子行是会话。
+# 整个盘只画一层树；子行左侧的竖线由 New-WorkTreeGutter 画。
+
+# 项目行的状态点：组内有在跑就金色呼吸（节奏和会话行那个点一致），否则静态米色。
+function New-WorkGroupDot {
+  param([bool]$Running)
+  $dot = New-Object System.Windows.Shapes.Ellipse
+  $dot.Width = 6
+  $dot.Height = 6
+  $dot.Margin = (New-Thickness '0,0,6,0')
+  $dot.VerticalAlignment = 'Center'
+  if ($Running) {
+    $dot.Fill = New-Brush '#D9A13C'
+    # 金色呼吸：和网页那条 fj-pulse 同款节奏——1.5 秒一个来回，0.3 到 1.0
+    $anim = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $anim.From = 0.3
+    $anim.To = 1.0
+    $anim.Duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(750))
+    $anim.AutoReverse = $true
+    $anim.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
+    $dot.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $anim)
+  } else {
+    $dot.Fill = New-Brush '#C9BDA6'
+  }
+  return $dot
+}
+
+# 项目行（父节点）：高 26、无边框无底色，整行可点，只切换这一组的折叠。
+# 点它绝不能碰「展开哪一行」（$script:WorkOpenId）——那是子行自己的事。
+function New-WorkGroupRow {
+  param($Group, [bool]$Closed, [double]$AgoMs)
+  $row = New-Object System.Windows.Controls.Border
+  $row.Height = 26
+  $row.Padding = (New-Thickness '3,0,3,0')
+  $row.CornerRadius = New-Object System.Windows.CornerRadius 7
+  $row.Background = [System.Windows.Media.Brushes]::Transparent
+  $row.Cursor = 'Hand'
+  $row.Tag = [string]$Group.Key
+  # hover：网页那条 rgba(255,253,246,.9) 落在纸色上的效果
+  $row.Add_MouseEnter({ try { $this.Background = New-Brush '#FFFDF6' } catch { } })
+  $row.Add_MouseLeave({ try { $this.Background = [System.Windows.Media.Brushes]::Transparent } catch { } })
+
+  $grid = New-Object System.Windows.Controls.Grid
+  $row.Child = $grid
+  # 0 点 · 1 项目名 · 2 N 个 · 3 · N 个在跑 · 4 弹性 · 5 合计 · 6 时间 · 7 箭头
+  for ($i = 0; $i -lt 8; $i++) {
+    $cd = New-Object System.Windows.Controls.ColumnDefinition
+    if ($i -eq 4) { $cd.Width = New-Object System.Windows.GridLength 1, 'Star' }
+    else { $cd.Width = [System.Windows.GridLength]::Auto }
+    [void]$grid.ColumnDefinitions.Add($cd)
+  }
+
+  $running = $false
+  try { $running = [bool]$Group.HasRun } catch { }
+  $dot = New-WorkGroupDot -Running $running
+  [System.Windows.Controls.Grid]::SetColumn($dot, 0)
+
+  $name = New-Text -Text ([string]$Group.Key) -Size 11 -Color '#6A5333' -Weight 'Bold' -Margin '0,0,0,0'
+  $name.TextWrapping = 'NoWrap'
+  $name.TextTrimming = 'CharacterEllipsis'
+  $name.MaxWidth = 148
+  $name.VerticalAlignment = 'Center'
+  [System.Windows.Controls.Grid]::SetColumn($name, 1)
+
+  $n = 0
+  try { $n = [int]$Group.Items.Count } catch { $n = 0 }
+  $countText = New-Text -Text ("$n 个") -Size 10 -Color '#9B866A' -Margin '6,0,0,0'
+  $countText.TextWrapping = 'NoWrap'
+  $countText.VerticalAlignment = 'Center'
+  [System.Windows.Controls.Grid]::SetColumn($countText, 2)
+
+  $runCount = 0
+  try { $runCount = [int]$Group.RunCount } catch { $runCount = 0 }
+  $runText = $null
+  if ($runCount -gt 0) {
+    $runText = New-Text -Text ('· ' + $runCount + ' 个在跑') -Size 10 -Color '#5F8A6A' -Margin '6,0,0,0'
+    $runText.TextWrapping = 'NoWrap'
+    $runText.VerticalAlignment = 'Center'
+    [System.Windows.Controls.Grid]::SetColumn($runText, 3)
+  }
+
+  $tokSum = 0.0
+  try { $tokSum = [double]$Group.Tokens } catch { $tokSum = 0.0 }
+  $tot = New-Text -Text ('合计 ' + (Format-TokenCount $tokSum)) -Size 10 -Color '#9B866A' -Margin '0,0,0,0'
+  $tot.TextWrapping = 'NoWrap'
+  $tot.VerticalAlignment = 'Center'
+  # 等宽数字：几行合计右对齐时尾数不会跳（和网页的 tabular-nums 一致）
+  try { [System.Windows.Documents.Typography]::SetNumeralAlignment($tot, [System.Windows.FontNumeralAlignment]::Tabular) } catch { }
+  [System.Windows.Controls.Grid]::SetColumn($tot, 5)
+
+  $agoText = '刚刚'
+  try { $agoText = Format-Ago $AgoMs } catch { $agoText = '刚刚' }
+  $ago = New-Text -Text $agoText -Size 10 -Color '#9B866A' -Margin '8,0,0,0'
+  $ago.TextWrapping = 'NoWrap'
+  $ago.VerticalAlignment = 'Center'
+  try { [System.Windows.Documents.Typography]::SetNumeralAlignment($ago, [System.Windows.FontNumeralAlignment]::Tabular) } catch { }
+  [System.Windows.Controls.Grid]::SetColumn($ago, 6)
+
+  $caretText = '▸'
+  if (-not $Closed) { $caretText = '▾' }
+  $caret = New-Text -Text $caretText -Size 9 -Color '#B9A98C' -Family 'Segoe UI Symbol' -Margin '6,0,0,0'
+  $caret.TextWrapping = 'NoWrap'
+  $caret.VerticalAlignment = 'Center'
+  [System.Windows.Controls.Grid]::SetColumn($caret, 7)
+
+  $grid.Children.Add($dot) | Out-Null
+  $grid.Children.Add($name) | Out-Null
+  $grid.Children.Add($countText) | Out-Null
+  if ($runText) { $grid.Children.Add($runText) | Out-Null }
+  $grid.Children.Add($tot) | Out-Null
+  $grid.Children.Add($ago) | Out-Null
+  $grid.Children.Add($caret) | Out-Null
+
+  $row.Add_PreviewMouseLeftButtonUp({
+      try {
+        $key = [string]$this.Tag
+        if (-not $key) { return }
+        if ($script:ClosedProjects.ContainsKey($key)) { $script:ClosedProjects.Remove($key) }
+        else { $script:ClosedProjects[$key] = $true }
+        Render-Work
+        Fit-WindowHeight
+      } catch { }
+    })
+  return $row
+}
+
+# 子行左侧的树线（对齐网页 .fj-spine）：竖线在距列表左边 16 DIP 处，
+# 卡片再往里让 13 DIP（总共缩进 29），中间 6 DIP 横枝接到卡片。
+# 非最后一行竖线贯穿整行；最后一行只画到横枝为止（└），不再往下延长。
+function New-WorkTreeGutter {
+  param([bool]$Last)
+  # rgba(190,170,135,.55) 的 ARGB 等效值
+  $railColor = '#8CBEAA87'
+  $g = New-Object System.Windows.Controls.Grid
+  $g.Width = 13
+  $g.HorizontalAlignment = 'Left'
+  $rail = New-Object System.Windows.Controls.Border
+  $rail.Width = 1
+  $rail.HorizontalAlignment = 'Left'
+  $rail.Margin = New-Object System.Windows.Thickness 0, 0, 0, 0
+  $rail.Background = New-Brush $railColor
+  $branch = New-Object System.Windows.Controls.Border
+  $branch.Width = 6
+  $branch.Height = 1
+  $branch.HorizontalAlignment = 'Left'
+  $branch.VerticalAlignment = 'Top'
+  # 横枝落在子行第一行的中线上（卡片上内边距 7 + 行高一半 ≈ 14）
+  $branch.Margin = New-Object System.Windows.Thickness 0, 14, 0, 0
+  $branch.Background = New-Brush $railColor
+  if ($Last) {
+    $rail.Height = 15
+    $rail.VerticalAlignment = 'Top'
+  } else {
+    $rail.VerticalAlignment = 'Stretch'
+  }
+  $g.Children.Add($rail) | Out-Null
+  $g.Children.Add($branch) | Out-Null
+  return $g
+}
+
+# 把会话卡片放进「13 宽树线 + 卡片」两列里（外层再让 16，合计缩进 29）
+function New-WorkTreeNode {
+  param($Card, [bool]$Last)
+  $node = New-Object System.Windows.Controls.Grid
+  $c0 = New-Object System.Windows.Controls.ColumnDefinition
+  $c0.Width = New-Object System.Windows.GridLength 13
+  $c1 = New-Object System.Windows.Controls.ColumnDefinition
+  $c1.Width = New-Object System.Windows.GridLength 1, 'Star'
+  [void]$node.ColumnDefinitions.Add($c0)
+  [void]$node.ColumnDefinitions.Add($c1)
+  $gutter = New-WorkTreeGutter -Last $Last
+  [System.Windows.Controls.Grid]::SetColumn($gutter, 0)
+  [System.Windows.Controls.Grid]::SetColumn($Card, 1)
+  $node.Children.Add($gutter) | Out-Null
+  $node.Children.Add($Card) | Out-Null
+  return $node
+}
+
 function New-WorkRow {
   param($Session, [bool]$Open)
   $row = New-Object System.Windows.Controls.Border
@@ -2096,37 +2276,28 @@ function New-WorkRow {
   $body = New-Object System.Windows.Controls.StackPanel
   $row.Child = $body
 
-  # 第一行：状态点 · 项目名 · 标题（长标题吃省略号）· 展开箭头
+  # 第一行：状态点 · 标题（长标题吃省略号）· 展开箭头
+  # 项目名已经上移到项目父行，子行不再重复画它，标题顶到最前。
   $line1 = New-Object System.Windows.Controls.Grid
   $c0 = New-Object System.Windows.Controls.ColumnDefinition
   $c0.Width = [System.Windows.GridLength]::Auto
   $c1 = New-Object System.Windows.Controls.ColumnDefinition
-  $c1.Width = [System.Windows.GridLength]::Auto
+  $c1.Width = New-Object System.Windows.GridLength 1, 'Star'
   $c2 = New-Object System.Windows.Controls.ColumnDefinition
-  $c2.Width = New-Object System.Windows.GridLength 1, 'Star'
-  $c3 = New-Object System.Windows.Controls.ColumnDefinition
-  $c3.Width = [System.Windows.GridLength]::Auto
+  $c2.Width = [System.Windows.GridLength]::Auto
   [void]$line1.ColumnDefinitions.Add($c0)
   [void]$line1.ColumnDefinitions.Add($c1)
   [void]$line1.ColumnDefinitions.Add($c2)
-  [void]$line1.ColumnDefinitions.Add($c3)
 
   $running = $false
   try { $running = [bool]$Session.running } catch { }
   $dot = New-WorkDot -Running $running
 
-  $projectText = ''
-  try { if ($Session.project) { $projectText = [string]$Session.project } } catch { }
-  if (-not $projectText) { $projectText = Get-ShortName $Session }
   $titleText = ''
-  try { if ($Session.title) { $titleText = [string]$Session.title } } catch { }
-  if ($titleText -eq $projectText) { $titleText = '' }
+  try { if ($Session.title) { $titleText = ([string]$Session.title).Trim() } } catch { }
+  # 和网页一致：标题空着就写「（没有标题）」，不再拿项目名做兜底
+  if (-not $titleText) { $titleText = '（没有标题）' }
 
-  $proj = New-Text -Text $projectText -Size 11 -Color $Ink -Weight 'Bold' -Margin '0,0,6,0'
-  $proj.MaxWidth = 118
-  $proj.TextWrapping = 'NoWrap'
-  $proj.TextTrimming = 'CharacterEllipsis'
-  $proj.VerticalAlignment = 'Center'
   $ttl = New-Text -Text $titleText -Size 10.5 -Color '#8A8172' -Margin '0,0,2,0'
   $ttl.TextWrapping = 'NoWrap'
   $ttl.TextTrimming = 'CharacterEllipsis'
@@ -2137,11 +2308,9 @@ function New-WorkRow {
   $caret.VerticalAlignment = 'Center'
 
   [System.Windows.Controls.Grid]::SetColumn($dot, 0)
-  [System.Windows.Controls.Grid]::SetColumn($proj, 1)
-  [System.Windows.Controls.Grid]::SetColumn($ttl, 2)
-  [System.Windows.Controls.Grid]::SetColumn($caret, 3)
+  [System.Windows.Controls.Grid]::SetColumn($ttl, 1)
+  [System.Windows.Controls.Grid]::SetColumn($caret, 2)
   $line1.Children.Add($dot) | Out-Null
-  $line1.Children.Add($proj) | Out-Null
   $line1.Children.Add($ttl) | Out-Null
   $line1.Children.Add($caret) | Out-Null
   $body.Children.Add($line1) | Out-Null
@@ -2286,33 +2455,131 @@ function Render-Work {
     if (-not $still) { $script:WorkOpenId = ''; $openId = '' }
   }
 
-  $shown = 0
+  # --- 按项目归组：同一个 project 的会话收成一个项目节点 ---
+  # 组键和网页 groupSessions 一致：project → short → 未归类
+  $groups = New-Object System.Collections.Generic.List[object]
+  $groupIndex = @{}
   foreach ($s in $sessions) {
     if ($null -eq $s) { continue }
-    if ($shown -ge 6) { break }   # 最多 6 行，再多就成一屏流水账了
-    if ($shown -gt 0) {
-      $div = New-Object System.Windows.Controls.Border
-      $div.Height = 1
-      $div.Background = New-Brush '#F0E6D2'
-      $div.Margin = New-Object System.Windows.Thickness 10, 3, 10, 3
-      $workList.Children.Add($div) | Out-Null
+    $key = ''
+    try { if ($s.project) { $key = ([string]$s.project).Trim() } } catch { }
+    if (-not $key) { try { if ($s.short) { $key = ([string]$s.short).Trim() } } catch { } }
+    if (-not $key) { $key = '未归类' }
+    if (-not $groupIndex.ContainsKey($key)) {
+      $g = [pscustomobject]@{
+        Key = $key
+        Items = (New-Object System.Collections.Generic.List[object])
+        RunCount = 0
+        HasRun = $false
+        LastAt = 0.0
+        Tokens = 0.0
+        MinIdle = -1.0
+      }
+      $groupIndex[$key] = $g
+      $groups.Add($g)
     }
-    $open = ($openId -ne '' -and [string]$s.id -eq $openId)
-    $row = New-WorkRow -Session $s -Open $open
-    $row.Add_PreviewMouseLeftButtonUp({
-        try {
-          # 行里的小按钮（「在 DSH 里打开」）自己处理点击，别把行顺手收起来
-          if (Test-HitInsideButton -Source $_.OriginalSource -StopAt $this) { return }
-          $id = [string]$this.Tag
-          if (-not $id) { return }
-          if ([string]$script:WorkOpenId -eq $id) { $script:WorkOpenId = '' }
-          else { $script:WorkOpenId = $id }
-          Render-Work -Reveal
-          Fit-WindowHeight
-        } catch { }
-      })
-    $workList.Children.Add($row) | Out-Null
-    $shown++
+    $g = $groupIndex[$key]
+    $g.Items.Add($s)
+    $tok = 0.0
+    try { if ($null -ne $s.tokens.total) { $tok = [double]$s.tokens.total } } catch { }
+    $g.Tokens = [double]$g.Tokens + $tok
+    $lp = 0.0
+    try { if ($null -ne $s.lastPromptAt) { $lp = [double]$s.lastPromptAt } } catch { }
+    if ($lp -gt [double]$g.LastAt) { $g.LastAt = $lp }
+    # 时间兜底：老会话可能没 lastPromptAt，就退回组内最小 idleMs（和网页一致）
+    try {
+      if ($null -ne $s.idleMs) {
+        $idle = [double]$s.idleMs
+        if ($idle -ge 0 -and ([double]$g.MinIdle -lt 0 -or $idle -lt [double]$g.MinIdle)) { $g.MinIdle = $idle }
+      }
+    } catch { }
+    $sRun = $false
+    try { $sRun = [bool]$s.running } catch { }
+    if ($sRun) { $g.HasRun = $true; $g.RunCount = [int]$g.RunCount + 1 }
+  }
+
+  # 组间：有在跑的组优先，再按组内最近活动倒序（组名做稳定键）
+  $groupSort = @(
+    @{ Expression = { if ($_.HasRun) { 0 } else { 1 } } },
+    @{ Expression = { [double]$_.LastAt }; Descending = $true },
+    @{ Expression = { [string]$_.Key } }
+  )
+  $groupList = @($groups | Sort-Object -Property $groupSort)
+
+  $nowMs = 0.0
+  try { if ($script:WorkData -and $null -ne $script:WorkData.now) { $nowMs = [double]$script:WorkData.now } } catch { }
+  if ($nowMs -le 0) { $nowMs = [DateTimeOffset]::Now.ToUnixTimeMilliseconds() }
+
+  # 行数上限跟着宿主 roots 数（8），不再是写死的 6：
+  # 同一项目的会话收成一组后行本来就少了，再按 6 砍会把一整组会话直接藏掉。
+  $rowCap = 8
+  $shown = 0
+  $openEl = $null
+  foreach ($g in $groupList) {
+    if ($shown -ge $rowCap) { break }
+    $closed = $false
+    try { $closed = $script:ClosedProjects.ContainsKey([string]$g.Key) } catch { }
+
+    # 组内最近活动；一次都没说过话就退回最小 idleMs（网页也是这么兜的）
+    $agoMs = 0.0
+    $lastAt = 0.0
+    try { $lastAt = [double]$g.LastAt } catch { }
+    if ($lastAt -gt 0) { $agoMs = $nowMs - $lastAt }
+    else { try { if ([double]$g.MinIdle -gt 0) { $agoMs = [double]$g.MinIdle } } catch { } }
+
+    # 一个组一个竖排容器：父行在上，子行挂在下面
+    $box = New-Object System.Windows.Controls.StackPanel
+    $box.Margin = New-Object System.Windows.Thickness 0, 1, 0, 6
+    $box.Children.Add((New-WorkGroupRow -Group $g -Closed $closed -AgoMs $agoMs)) | Out-Null
+    $workList.Children.Add($box) | Out-Null
+
+    # 注意：PS 5.1 里对 PSCustomObject 上的 List 属性写 @($g.Items) 会抛
+    # "Argument types do not match"，必须走 ToArray()。
+    $kids = $g.Items.ToArray()
+    if ($closed) {
+      # 折叠的组照样占上限：只是没画子行，会话还是那些
+      $shown += $kids.Count
+      continue
+    }
+    # 子行容器：对应网页 .fj-spine 的 margin「1px 0 3px 16px」——左边 16 就是竖线位置
+    $spine = New-Object System.Windows.Controls.StackPanel
+    $spine.Margin = New-Object System.Windows.Thickness 16, 1, 0, 3
+    $box.Children.Add($spine) | Out-Null
+
+    # 组内：在跑排前，再按 lastPromptAt 倒序（id 做稳定键）
+    $itemSort = @(
+      @{ Expression = { if ([bool]$_.running) { 0 } else { 1 } } },
+      @{ Expression = { $lp = 0.0; try { if ($null -ne $_.lastPromptAt) { $lp = [double]$_.lastPromptAt } } catch { }; $lp }; Descending = $true },
+      @{ Expression = { [string]$_.id } }
+    )
+    $items = @($kids | Sort-Object -Property $itemSort)
+    for ($i = 0; $i -lt $items.Count; $i++) {
+      if ($shown -ge $rowCap) { break }
+      $s = $items[$i]
+      if ($null -eq $s) { continue }
+      $isLast = ($i -eq ($items.Count - 1))
+      $open = ($openId -ne '' -and [string]$s.id -eq $openId)
+      $row = New-WorkRow -Session $s -Open $open
+      # 行间距 5（对应网页 .fj-spine 的 gap 5px）；最后一行不再留，交给组的 3px 底边
+      if ($isLast) { $row.Margin = New-Object System.Windows.Thickness 0, 0, 0, 0 }
+      else { $row.Margin = New-Object System.Windows.Thickness 0, 0, 0, 5 }
+      $row.Add_PreviewMouseLeftButtonUp({
+          try {
+            # 行里的小按钮（「在 DSH 里打开」）自己处理点击，别把行顺手收起来
+            if (Test-HitInsideButton -Source $_.OriginalSource -StopAt $this) { return }
+            $id = [string]$this.Tag
+            if (-not $id) { return }
+            if ([string]$script:WorkOpenId -eq $id) { $script:WorkOpenId = '' }
+            else { $script:WorkOpenId = $id }
+            Render-Work -Reveal
+            Fit-WindowHeight
+          } catch { }
+        })
+      $node = New-WorkTreeNode -Card $row -Last $isLast
+      $spine.Children.Add($node) | Out-Null
+      if ($open) { $openEl = $row }
+      $shown++
+    }
   }
 
   Update-WorkNote
@@ -2321,13 +2588,9 @@ function Render-Work {
   $scroll.ScrollToVerticalOffset($offset)
 
   # 点开一行时把它带进视野：展开的详单在卡片底部时不该要用户自己滚
-  if ($Reveal -and $openId -ne '') {
-    foreach ($child in $workList.Children) {
-      if ($child -is [System.Windows.Controls.Border] -and [string]$child.Tag -eq $openId) {
-        try { $child.BringIntoView() } catch { }
-        break
-      }
-    }
+  # （行现在包在树节点 Grid 里，不能再按 $workList 的一级子元素找 Border，直接记住行）
+  if ($Reveal -and $openEl) {
+    try { $openEl.BringIntoView() } catch { }
   }
 }
 
