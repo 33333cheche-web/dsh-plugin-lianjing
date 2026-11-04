@@ -51,7 +51,10 @@ window.__ModuleLoader__.load({
       .fj-fit{position:relative;display:flex;justify-content:center;width:100%;transform:scale(var(--fj-scale,1));transform-origin:bottom center}
       .fj-img{display:block;height:${PET_H}px;width:auto;max-width:220px;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(60,90,88,.28));animation:fj-breathe 5.2s ease-in-out infinite}
       .fj-img[data-talking="on"]{animation:fj-bob 2.4s ease-in-out infinite}
-      .fj-tag{margin-top:-4px;font-size:10px;font-weight:700;letter-spacing:.08em;color:#3f5f5c;background:rgba(255,251,242,.94);border:1px solid rgba(190,170,135,.5);border-radius:5px;padding:2px 9px;white-space:nowrap;backdrop-filter:blur(8px);box-shadow:0 4px 10px rgba(90,110,100,.14)}
+      .fj-chips{display:flex;align-items:center;gap:6px;margin-top:-4px}
+      .fj-tag{margin-top:0;font-size:10px;font-weight:700;letter-spacing:.08em;color:#3f5f5c;background:rgba(255,251,242,.94);border:1px solid rgba(190,170,135,.5);border-radius:5px;padding:2px 9px;white-space:nowrap;backdrop-filter:blur(8px);box-shadow:0 4px 10px rgba(90,110,100,.14)}
+      /* 右边这枚是和桌面壳一致的「已积功德」：一直显示，没敲过就是 0 */
+      .fj-merit{font-size:10px;font-weight:800;letter-spacing:.04em;color:#7a6a4e;background:rgba(255,251,242,.94);border:1px solid rgba(190,170,135,.5);border-radius:5px;padding:2px 9px;white-space:nowrap;backdrop-filter:blur(8px);box-shadow:0 4px 10px rgba(90,110,100,.14)}
       .fj-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;background:#8cb7a4;box-shadow:0 0 6px rgba(140,183,164,.8);vertical-align:1px}
       .fj-dot[data-off="off"]{background:#d99b8f;box-shadow:0 0 6px rgba(217,155,143,.8)}
       /* ---- 古书卡片 ---- */
@@ -1459,13 +1462,15 @@ window.__ModuleLoader__.load({
                 setOpen(true);
               },
             }, h('i', { 'aria-hidden': true }))),
-          h('span', { className: 'fj-tag' },
-            h('i', { className: 'fj-dot', 'data-off': online ? 'on' : 'off' }),
-            running
-              ? '翻经中'
-              : workRunning > 0
-                ? `${workRunning} 个在跑`
-                : Number.isFinite(countdown) && countdown > 0 ? untilText(countdown) : '静坐中')),
+          h('div', { className: 'fj-chips' },
+            h('span', { className: 'fj-tag' },
+              h('i', { className: 'fj-dot', 'data-off': online ? 'on' : 'off' }),
+              running
+                ? '翻经中'
+                : workRunning > 0
+                  ? `${workRunning} 个功课进行中`
+                  : Number.isFinite(countdown) && countdown > 0 ? untilText(countdown) : '静坐中'),
+            h('span', { className: 'fj-merit' }, `已积功德 ${Number(muyuTotal) || 0}`))),
           open ? card : null,
           open ? h('span', { className: 'fj-tail', 'aria-hidden': true }) : null));
     }

@@ -881,7 +881,7 @@ $petGroup.Children.Add($petHost) | Out-Null
 $stack.Children.Add($petGroup) | Out-Null
 
 # 立绘下面的小标签：跟网页里的 .fj-tag 同一套语义（状态点 + 一行字）。
-# 有功课在跑时改成「N 个在跑」；否则保持原来的说法：静坐中 / 翻经中 / MM:SS 后再读。
+# 有功课在跑时改成「N 个功课进行中」；否则保持原来的说法：静坐中 / 翻经中 / MM:SS 后再读。
 $tagBorder = New-Object System.Windows.Controls.Border
 $tagBorder.CornerRadius = New-Object System.Windows.CornerRadius 6
 $tagBorder.Background = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString('#FFFBF2')))
@@ -1795,7 +1795,7 @@ function Update-PetTag {
   } catch { $run = 0 }
   $dotColor = '#8CB7AF'
   if ($run -gt 0) {
-    $tagText.Text = "$run 个在跑"
+    $tagText.Text = "$run 个功课进行中"
     $dotColor = '#D2A03C'
   } else {
     $petRunning = $false

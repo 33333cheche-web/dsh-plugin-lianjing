@@ -278,7 +278,10 @@ check('壳里点行也能展开', shellSource.includes('Render-Work') && shellSo
 check('壳里子任务也是三态', shellSource.includes("'◔'") && shellSource.includes("'○'"));
 check('壳拉功课不阻塞界面', shellSource.includes('Start-WorkFetch') && shellSource.includes('Complete-WorkFetch'));
 check('数据变少窗口会缩', /function Update-Work[\s\S]{0,900}Fit-WindowHeight/.test(shellSource));
-check('壳的小标签会报在跑数', shellSource.includes('Update-PetTag') && shellSource.includes('个在跑'));
+check('壳的小标签会报在跑数', shellSource.includes('Update-PetTag') && shellSource.includes('个功课进行中'));
+check('网页小标签说法和壳一致', clientSource.includes('个功课进行中'));
+check('网页小标签右边有已积功德', /fj-merit[\s\S]{0,120}?已积功德/.test(clientSource));
+check('壳里两枚标签并排常显', shellSource.includes('$knockText') && shellSource.includes('已积功德 {0}'));
 
 console.log('敲木鱼');
 // 点她中间那一下：出声、飘一句彩头、宿主管累计
