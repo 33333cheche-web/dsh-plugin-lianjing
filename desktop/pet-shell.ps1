@@ -696,6 +696,114 @@ $petBrush = New-Object System.Windows.Media.ImageBrush
 $petBrush.Stretch = 'Uniform'
 $petImage.Background = $petBrush
 $petHost.Children.Add($petImage) | Out-Null
+# --- 佛光 ---------------------------------------------------------------------
+# 有活在跑时，立绘背后那一圈慢慢转的金色光（网页端 .fj-halo 的桌面版）。
+# 素材是网页 conic-gradient 烘好的 512×512 PNG；加载失败就静默跳过，不能让壳起不来。
+# 尺寸/位置照网页端比例换算，不写死像素：网页立绘 196px 时佛光圆 206px、
+# 圆心在立绘顶部往下 104px（≈53% 高度），这里按立绘实际显示高度等比缩。
+$script:HaloDiameterRatio = 206.0 / 196.0
+$script:HaloCenterRatio = 104.0 / 196.0
+$script:HaloOn = $false
+$script:HaloImage = $null
+$script:HaloBox = $null
+
+# 佛光圆比立绘大一圈（直径约 1.05 倍）：直接挂在 $petHost 里会把 Grid 撑大，
+# 把立绘和下面那排标签整体往下挤。所以套一层「和立绘同尺寸」的盒子：
+# 盒子参与布局但不裁剪，佛光超出的部分照样画出来，布局一点都不变。
+function Update-HaloLayout {
+  try {
+    if (-not $script:HaloBox -or -not $script:HaloImage) { return }
+    $petH = [double]$petImage.Height
+    if ($petH -le 0) { return }
+    $petW = [double]$petImage.Width
+    if ($petW -le 0) { $petW = [int]($petH * 0.96) }
+    $d = $petH * $script:HaloDiameterRatio
+    $script:HaloBox.Width = $petW
+    $script:HaloBox.Height = $petH
+    $script:HaloImage.Width = $d
+    $script:HaloImage.Height = $d
+    # 圆心落在立绘高度的 53%：图顶边 = 0.53H - D/2（网页端 104 - 103 = 1px）
+    $top = ($petH * $script:HaloCenterRatio) - ($d / 2)
+    if ($top -lt 0) { $top = 0 }
+    $script:HaloImage.Margin = New-Object System.Windows.Thickness 0, $top, 0, 0
+  } catch { }
+}
+
+# 在跑 <-> 不跑：淡入淡出各 0.42s；不跑时淡完再 Collapsed（网页端没活就整个不渲染）
+function Set-HaloRunning {
+  param([bool]$Running)
+  try {
+    if (-not $script:HaloImage) { return }
+    if ($script:HaloOn -eq $Running) { return }
+    $script:HaloOn = $Running
+    $duration = [System.Windows.Duration]::new([TimeSpan]::FromMilliseconds(420))
+    if ($Running) {
+      $script:HaloImage.Visibility = 'Visible'
+      $fade = New-Object System.Windows.Media.Animation.DoubleAnimation
+      $fade.From = 0.0
+      $fade.To = 1.0
+      $fade.Duration = $duration
+      $script:HaloImage.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
+    } else {
+      $fade = New-Object System.Windows.Media.Animation.DoubleAnimation
+      $fade.From = 1.0
+      $fade.To = 0.0
+      $fade.Duration = $duration
+      $fade.Add_Completed({
+          # 淡出期间又被拉回「在跑」就别收
+          try { if (-not $script:HaloOn -and $script:HaloImage) { $script:HaloImage.Visibility = 'Collapsed' } } catch { }
+        })
+      $script:HaloImage.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
+    }
+  } catch { }
+}
+
+try {
+  $haloPath = Join-Path $AssetDir 'halo.png'
+  if (Test-Path $haloPath) {
+    $haloBox = New-Object System.Windows.Controls.Grid
+    $haloBox.HorizontalAlignment = 'Center'
+    $haloBox.VerticalAlignment = 'Top'
+    $haloBox.IsHitTestVisible = $false
+    $haloBox.Focusable = $false
+    $halo = New-Object System.Windows.Controls.Image
+    $halo.Stretch = 'Uniform'
+    $halo.HorizontalAlignment = 'Center'
+    $halo.VerticalAlignment = 'Top'
+    $halo.IsHitTestVisible = $false
+    $halo.Focusable = $false
+    $halo.Visibility = 'Collapsed'
+    $halo.Opacity = 0.0
+    $halo.RenderTransformOrigin = New-Object System.Windows.Point 0.5, 0.5
+    $haloSpin = New-Object System.Windows.Media.RotateTransform 0.0
+    $halo.RenderTransform = $haloSpin
+    # 和网页同一步调：一圈 5.5 秒、线性、永远转（隐藏时转不转看不出来，不折腾启停）
+    $haloSpinAnim = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $haloSpinAnim.From = 0.0
+    $haloSpinAnim.To = 360.0
+    $haloSpinAnim.Duration = [System.Windows.Duration]::new([TimeSpan]::FromSeconds(5.5))
+    $haloSpinAnim.RepeatBehavior = [System.Windows.Media.Animation.RepeatBehavior]::Forever
+    $haloSpin.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, $haloSpinAnim)
+    # CacheOption=OnLoad：解码完立刻 Freeze，别占着文件句柄
+    $haloBmp = New-Object System.Windows.Media.Imaging.BitmapImage
+    $haloBmp.BeginInit()
+    $haloBmp.CacheOption = 'OnLoad'
+    $haloBmp.UriSource = New-Object System.Uri $haloPath
+    $haloBmp.EndInit()
+    $haloBmp.Freeze()
+    $halo.Source = $haloBmp
+    $haloBox.Children.Add($halo) | Out-Null
+    # 插到第 0 个：Grid 的绘制顺序就是子元素顺序，佛光必须在立绘下面
+    $petHost.Children.Insert(0, $haloBox) | Out-Null
+    $script:HaloBox = $haloBox
+    $script:HaloImage = $halo
+    Update-HaloLayout
+  }
+} catch {
+  # 佛光是装饰：素材缺失/解码失败就静默降级，壳照常起
+  $script:HaloBox = $null
+  $script:HaloImage = $null
+}
 
 # 飘字层：敲木鱼的「功德 +1」在这一层往上飘。纯装饰，绝不参与命中测试。
 $floatLayer = New-Object System.Windows.Controls.Canvas
@@ -895,6 +1003,7 @@ function Set-CardSize {
   # 展开时把立绘缩小，把省下的纵向空间让给经文与释义
   $petImage.Height = $petH
   $petImage.Width = [int]($petH * 0.96)
+  Update-HaloLayout
   $bottom = $window.Top + $window.Height
   $window.Height = $height
   $wa = Get-WindowWorkArea
@@ -1701,6 +1810,8 @@ function Update-PetTag {
     }
   }
   $tagDot.Fill = New-Brush $dotColor
+  # 佛光：和上面的 $run 是同一个数（网页端 runningCount > 0 才渲染）
+  Set-HaloRunning ($run -gt 0)
   Update-KnockCount
 }
 

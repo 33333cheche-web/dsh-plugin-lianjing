@@ -304,6 +304,14 @@ check('接力收 id 但要挡住不像话的', hostSource.includes('会话 id �
 check('快照把请求带给界面', hostSource.includes('pendingOpen: state.pendingOpen'));
 check('界面那侧真的去切会话', clientSource.includes('pendingOpen') && clientSource.includes('seenOpen'));
 check('壳里开着时轮询更快好接力', clientSource.includes('shellUp ? 2500'));
+console.log('佛光');
+const haloBytes = await readFile(join(root, 'assets', 'halo.png')).catch(() => null);
+check('佛光素材随包', Boolean(haloBytes) && haloBytes.length > 5000 && haloBytes[0] === 0x89 && haloBytes[1] === 0x50);
+check('壳里按网页比例换算直径与圆心', shellSource.includes('206.0 / 196.0') && shellSource.includes('104.0 / 196.0'));
+check('有活才淡出来、闲时收起', shellSource.includes('Set-HaloRunning') && shellSource.includes("'Collapsed'"));
+check('佛光是慢慢转的', shellSource.includes('RotateTransform') && shellSource.includes('RepeatBehavior'));
+check('佛光不挡敲木鱼', /Halo[\s\S]{0,600}?IsHitTestVisible = \$false/.test(shellSource));
+check('素材缺了也能起壳', /Halo[\s\S]{0,900}?catch \{/.test(shellSource));
 console.log('清单与启动');
 const pluginJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 check('清单给她自己的形象当图标', pluginJson.icon === './icon.png' && (await readFile(join(root, 'icon.png'))).length > 1024);
