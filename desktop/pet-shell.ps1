@@ -582,7 +582,11 @@ $btnMore.ToolTip = '把这一句的白话与练习展开或收起'
 # 功课页专用：手动拉一次 work.json（不点也会自动每 5 秒拉）
 $btnRefresh = New-LinkButton -Label '刷新' -Color '#7A8F88'
 $btnRefresh.Visibility = 'Collapsed'
+# 取经入口也摆到操作栏上：右键菜单里本来就有，可没人会想到去右键
+$btnFetch = New-LinkButton -Label '取经' -Color '#B4894A'
+$btnFetch.ToolTip = '从 fojing.com 再取一部经的原文，存进本地语料'
 $btnRow.Children.Add($btnRefresh) | Out-Null
+$btnRow.Children.Add($btnFetch) | Out-Null
 $btnRow.Children.Add($btnMore) | Out-Null
 $btnRow.Children.Add($btnClose) | Out-Null
 $btnRow.Children.Add($btnNext) | Out-Null
@@ -2850,6 +2854,14 @@ $menu.Items.Add($miFetch) | Out-Null
 $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 $menu.Items.Add($miQuit) | Out-Null
 $petImage.ContextMenu = $menu
+# 卡片上的「取经」不开第二套菜单：把这个右键菜单在她按钮底下弹出来，
+# 顺手把取经子菜单展开，省得点两下。
+$btnFetch.Add_Click({
+    $menu.PlacementTarget = $btnFetch
+    $menu.Placement = [System.Windows.Controls.Primitives.PlacementMode]::Bottom
+    $menu.IsOpen = $true
+    $miFetch.IsSubmenuOpen = $true
+  })
 
 # --- 眼神节拍 ---------------------------------------------------------------
 # 只负责「睁眼那几秒到期了没」和「未读的间歇抬眼」：一秒一次，图没变就不动。

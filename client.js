@@ -857,8 +857,10 @@ window.__ModuleLoader__.load({
 
       // --- 联网取经 ----------------------------------------------------------
       const openFetch = async (from) => {
-        // 记一下从哪儿来：从「今日读经」进来，回退就该回读经页（此时 study 里还没载经）
-        setFetchFrom(from === 'study' ? 'study' : 'card');
+        // 记一下从哪儿来：从「今日读经」进来，回退就该回读经页（此时 study 里还没载经）；
+        // 从「功课」页进来也回功课页——别把人扔到别的页去。
+        const origin = from === 'study' ? 'study' : from === 'work' ? 'work' : 'card';
+        setFetchFrom(origin);
         setView('fetch');
         setImportMsg('');
         try {
@@ -871,7 +873,8 @@ window.__ModuleLoader__.load({
 
       const backFromFetch = () => {
         setImportMsg('');
-        setView(fetchFrom === 'study' && sutra ? 'study' : 'card');
+        if (fetchFrom === 'study') setView(sutra ? 'study' : 'card');
+        else setView(fetchFrom === 'work' ? 'work' : 'card');
       };
 
       const runImport = async (payload) => {
@@ -1256,6 +1259,12 @@ window.__ModuleLoader__.load({
         return h('div', null,
           h('div', { className: 'fj-head' },
             tabs('work'),
+            // 「取经」得在每一页都找得到：默认页就是功课，藏起来等于没了
+            h('button', {
+              className: 'fj-head-fetch', type: 'button',
+              onClick: () => { void openFetch('work'); },
+              title: '从 fojing.com 再取一部经的原文',
+            }, '取经'),
             h('button', { className: 'fj-close', type: 'button', onClick: close, 'aria-label': '收起卡片' }, '×')),
           h('div', { className: 'fj-body' },
             h('div', { className: 'fj-work-sum' },
