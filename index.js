@@ -921,7 +921,9 @@ export function apply(ctx, config) {
       if (request.method !== 'POST') return json(shellStatus());
       const body = await readBody(request);
       const action = String(body.action || '');
-      if (action === 'launch') return json(await launchShell(body.origin));
+      // 桌面端页面的 origin 是 dsh-app://，浏览器里才是 http://127.0.0.1:端口。
+      // 前者认不出来就退回请求自己的 Host —— 壳拿不到真地址就会「静坐中 / 已积功德 0」。
+      if (action === 'launch') return json(await launchShell(loopbackOrigin(body.origin) || originFromHost(request)));
       if (action === 'quit') return json(quitShell());
       if (action === 'heartbeat') return json(shellHeartbeat(body));
       return json({ ok: false, error: 'action 必须是 launch 或 quit' }, 400);
@@ -1066,6 +1068,7 @@ export function apply(ctx, config) {
 
   // --- 桌面壳：独立进程 + 免鉴权回环路由 -----------------------------------
   let shellChild = null;
+  let shellOrigin = null;
   let shellError = null;
   // 手动启动的壳（桌面快捷方式、脚本）Host 是不知道的，靠它自己报到：
   // 否则网页里会再画一只，桌上就站着两只莲鲸。
@@ -1094,20 +1097,49 @@ export function apply(ctx, config) {
     };
   };
 
+  // 桌面壳要的是宿主自己的回环地址。之前这里兜底硬编码 10567，
+  // 端口一变壳就全读不到（静坐中 / 已积功德 0），心跳也发不出去，
+  // 网页里那只就不肯隐身 —— 桌面上站着两只，一只还是假的。
+  const loopbackOrigin = (raw) => {
+    try {
+      const url = new URL(String(raw || ''));
+      if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return url.origin;
+    } catch { /* 不是 URL，交给 Host 兜底 */ }
+    return null;
+  };
+
+  const originFromHost = (request) => {
+    // 请求自己的 URL 里通常就带着真实端口（桥接用 req.headers.host 拼的）
+    try {
+      const port = new URL(String(request?.url || '')).port;
+      if (port) return `http://127.0.0.1:${port}`;
+    } catch { /* 往下看 */ }
+    const host = String(request?.headers?.get?.('host') || '');
+    const port = (host.match(/:(\d{2,5})$/) || [])[1];
+    if (port) return `http://127.0.0.1:${port}`;
+    // 最后问宿主自己监听的端口
+    try {
+      const server = ctx.get?.('webServer') ?? ctx.webServer;
+      const listened = Number(server?.port) || 0;
+      if (listened > 0) return `http://127.0.0.1:${listened}`;
+    } catch { /* 没有这个服务 */ }
+    return null;
+  };
+
   const launchShell = async (origin) => {
     if (process.platform !== 'win32') {
       return { ok: false, ...shellStatus(), error: '当前只有 Windows 悬浮壳实现' };
     }
-    if (shellChild) return { ok: true, ...shellStatus() };
+    const safeOrigin = origin || null;
+    if (!safeOrigin) return { ok: false, ...shellStatus(), error: '拿不到宿主地址，桌面壳读不到功课' };
+    if (shellChild) {
+      // 地址变了（DSH 重启换了端口）：旧壳还站着也读不到数据，直接换一只新的
+      if (!shellOrigin || origin === shellOrigin) return { ok: true, ...shellStatus() };
+      try { shellChild.kill(); } catch { /* 已经退了 */ }
+      shellChild = null;
+      shellOrigin = null;
+    }
     const script = join(here, 'desktop', 'pet-shell.ps1');
-    // 只接受回环来源，避免把任意 URL 塞给壳
-    const safeOrigin = (() => {
-      try {
-        const url = new URL(String(origin || ''));
-        if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return url.origin;
-      } catch { /* 落到默认 */ }
-      return 'http://127.0.0.1:10567';
-    })();
     try {
       shellError = null;
       // 别加 detached：Windows 上 detached + 无控制台会让 WPF 的 ShowDialog 立刻返回，
@@ -1117,20 +1149,36 @@ export function apply(ctx, config) {
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
         '-File', script, '-Origin', safeOrigin, '-AssetDir', assetsDir,
       ], { stdio: 'ignore', windowsHide: true, cwd: here });
+      shellOrigin = safeOrigin;
       shellChild.on('error', (error) => {
         shellError = String(error?.message || error);
         exitedEarly = true;
         shellChild = null;
+        shellOrigin = null;
       });
       shellChild.on('exit', (code) => {
         exitedEarly = true;
         shellChild = null;
+        shellOrigin = null;
         if (code) shellError = `悬浮壳退出了（code ${code}）`;
       });
       shellChild.unref();
       // 一秒内就退出，多半是脚本自己报错：把话说明白，别让按钮看起来没反应
       await new Promise((resolve) => setTimeout(resolve, 900));
       if (exitedEarly) return { ok: false, ...shellStatus(), error: shellError || '悬浮壳启动后立刻退出了' };
+      // 地址给错了壳是能画出来的，只是永远「静坐中 / 已积功德 0」——
+      // 与其让她在桌上当个假人，不如当场说清楚。
+      const reachable = await Promise.race([
+        fetch(`${safeOrigin}/dsh-fojing-pet/pet.json`, { signal: AbortSignal.timeout(1500) })
+          .then((response) => response.ok).catch(() => false),
+        new Promise((resolve) => setTimeout(() => resolve(null), 1800)),
+      ]);
+      if (reachable === false) {
+        try { shellChild?.kill(); } catch { /* 已经退了 */ }
+        shellChild = null;
+        shellOrigin = null;
+        return { ok: false, ...shellStatus(), error: `桌面壳连不上宿主（${safeOrigin}），功课会读不到` };
+      }
       return { ok: true, ...shellStatus() };
     } catch (error) {
       shellError = String(error?.message || error);
@@ -1142,6 +1190,7 @@ export function apply(ctx, config) {
     if (shellChild) {
       try { shellChild.kill(); } catch { /* 已退出 */ }
       shellChild = null;
+      shellOrigin = null;
     }
     // 自己报到的壳也要能收回来
     if (externalShellAlive() && shellBeatPid) {

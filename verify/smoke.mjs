@@ -333,6 +333,9 @@ check('功课每行带 session id 好跳转', hostSource.includes('short: id.rep
 // 2026-11-04 回归：detached 起来壳会「启动即退出」，界面看着像点了没反应
 check('拉起悬浮壳不用 detached', hostSource.includes('windowsHide: true') && !hostSource.includes('detached: true'));
 check('壳起不来要报错不要装没事', hostSource.includes('启动后立刻退出'));
+check('壳的地址不再硬编码端口', !hostSource.includes('127.0.0.1:10567'));
+check('桌面端 origin 认不出来就用请求的 Host', hostSource.includes('originFromHost') && hostSource.includes('loopbackOrigin(body.origin)'));
+check('换端口会把读不到数据的旧壳换掉', hostSource.includes('shellOrigin') && hostSource.includes('旧壳还站着也读不到数据'));
 console.log('');
 if (failures) {
   console.log(`失败 ${failures} 项`);
