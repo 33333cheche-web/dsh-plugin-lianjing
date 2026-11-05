@@ -56,7 +56,7 @@
     "corpus/",
     "skill/",
     "desktop/",
-    "docs/",
+    "docs/*.md",
     "scripts/",
     "README.md",
     "CHANGELOG.md",
