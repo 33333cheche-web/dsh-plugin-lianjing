@@ -34,7 +34,7 @@
         "en": "Lianjing · Desktop Pet"
       },
       "description": {
-        "zh": "屏幕右下角，一条在莲台上打坐的鲸。正事是替你看住一屋子的 agent——会话、子任务、token、耗时排成一张看板，点一行就跳回那个对话；闲事是陪你敲两下木鱼、翻两页经。网页浮层和 Windows 独立桌面壳都有，尺寸三档。",
+        "zh": "屏幕右下角，一条在莲台上打坐的鲸。正事是替你看住一屋子的 agent：会话、子任务、token、耗时排成一张看板，点一行就跳回那个对话；闲事是陪你敲两下木鱼、翻两页经。网页浮层和 Windows 独立桌面壳都有，尺寸三档。",
         "en": "A whale meditating on a lotus in the corner of your screen. Her day job is watching your agents: sessions, sub-tasks, tokens and time on one board, click a row to jump back into that conversation. Off duty she knocks a wooden fish and turns a page of sutra. Web overlay and a standalone Windows shell, three sizes."
       },
       "icon": "https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/icon.png",
