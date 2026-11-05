@@ -74,7 +74,7 @@
 
 ## 安装
 
-需要 **DSH 桌面版**（Windows）和 Node 18+。
+需要 **DSH 桌面版**（Windows）。npm 上暂时没发（国内注册不了账号），所以「发现」里搜不到，走下面的索引源或安装包。
 
 **方式一：安装包（给同事最省事）**
 
@@ -84,14 +84,26 @@
 dsh plugin --profile desktop add "D:\下载\dsh-plugin-lianjing-2.0.2.tgz"
 ```
 
-**方式二：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
+**方式二：在 DSH 里点着装（不用命令行，也不用 npm）**
+
+插件 → **发现** → 右上「索引源」/「管理索引源…」→ **添加索引源**，粘贴这份索引的地址：
+
+```
+https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/index.json
+```
+
+确定后「莲鲸」会出现在列表里，点**安装**即可。索引里记的是固定到提交的 `git+https` 地址，装到的就是对应版本，不会跟着 main 乱跑。
+
+> 用 jsDelivr 而不是 `raw.githubusercontent.com`，是因为后者在国内经常连不上。索引本身（`market/index.json`）就是[格式 1](https://github.com/33333cheche-web/dsh-plugin-lianjing/blob/main/market/index.json) 的插件市场索引，DSH 自带的校验器能直接读。
+
+**方式三：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
 
 ```powershell
 git clone https://github.com/33333cheche-web/dsh-plugin-lianjing.git
 dsh plugin --profile desktop add "link:D:\path\to\dsh-plugin-lianjing"
 ```
 
-两种方式都会同时把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。撤掉用 `dsh plugin --profile desktop remove dsh-plugin-lianjing`。
+三种方式都会同时把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。撤掉用 `dsh plugin --profile desktop remove dsh-plugin-lianjing`。
 
 **装完必须重启 DSH 桌面应用**（desktop profile 由 Electron 独占），右下角才会出现莲鲸。
 

@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "title": {
+    "zh": "莲鲸插件源",
+    "en": "Lianjing Plugin Source"
+  },
+  "description": {
+    "zh": "个人维护的小仓库，目前只有一只莲鲸桌宠。装法：插件 → 发现 → 添加索引源，粘贴本文件的地址。",
+    "en": "A small personal source. Add this URL as a market index source under Plugins → Discover."
+  },
+  "metadata": {
+    "categories": {
+      "desktop": {
+        "title": {
+          "zh": "桌面与外观",
+          "en": "Desktop & Appearance"
+        }
+      }
+    },
+    "labels": {
+      "free": {
+        "title": {
+          "zh": "免费",
+          "en": "Free"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-plugin-lianjing",
+      "title": {
+        "zh": "莲鲸 · 陪你干活的桌宠",
+        "en": "Lianjing · Desktop Pet"
+      },
+      "description": {
+        "zh": "一只在莲台上打坐的鲸鱼娘，浮在屏幕右下角：功课面板替你看住所有 agent（会话、子任务进度、token、耗时），点一下跳回对应对话；闲下来陪你敲木鱼、翻两页经。网页浮层与 Windows 独立桌面壳两套，尺寸三档可缩。",
+        "en": "A whale girl meditating on a lotus in the corner of your screen. The work panel watches your agents for you and jumps back to a session on click; when idle she knocks a wooden fish and turns a page of sutra. Web overlay and a standalone Windows WPF shell, three sizes."
+      },
+      "icon": "https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/icon.png",
+      "author": "33333cheche-web",
+      "homepage": "https://github.com/33333cheche-web/dsh-plugin-lianjing",
+      "repository": {
+        "url": "https://github.com/33333cheche-web/dsh-plugin-lianjing"
+      },
+      "metadata": {
+        "category": "desktop",
+        "keywords": [
+          "桌宠",
+          "desktop-pet",
+          "会话监控",
+          "agent-tree",
+          "token-usage",
+          "莲鲸",
+          "佛经",
+          "sutra"
+        ],
+        "labels": [
+          "free"
+        ]
+      },
+      "versions": [
+        {
+          "version": "2.0.2",
+          "publishTimestamp": 1793863364,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/33333cheche-web/dsh-plugin-lianjing",
+            "commit": "433309e7464a1eb5904bc9bb94f1f9493dad01e8"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5"
+          }
+        }
+      ]
+    }
+  ]
+}
