@@ -93,7 +93,7 @@
   .notes b{color:var(--ink);font-weight:600;}
 
   .install{background:var(--paper-2);border:1px solid var(--line);border-radius:20px;padding:30px 30px 26px;}
-  .ways{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;}
+  .ways{display:grid;grid-template-columns:repeat(2,1fr);gap:24px 26px;}
   .way h4{margin:0 0 6px;font-size:15px;letter-spacing:.02em;}
   .way .k{font-size:12px;color:var(--muted);margin:0 0 10px;}
   .way p{margin:0 0 10px;font-size:13.5px;color:var(--ink-2);}
@@ -138,7 +138,7 @@
         都记在一张宣纸卡上。点其中一行，即转入对应的对话。
       </p>
       <div class="badges">
-        <span class="badge">v2.0.2</span>
+        <a class="badge" href="https://www.npmjs.com/package/dsh-plugin-lianjing" style="border-bottom:none;text-decoration:none;">npm · v2.0.2</a>
         <span class="badge">Windows · DSH 插件</span>
         <span class="badge">MIT</span>
         <span class="badge">网页浮层与桌面窗口</span>
@@ -232,11 +232,19 @@
 
   <section id="install">
     <h2 class="serif">安装</h2>
-    <p class="h2-sub">三条路，择其一。</p>
+    <p class="h2-sub">四条路，择其一。</p>
     <div class="install">
       <div class="ways">
         <div class="way">
-          <h4>① 于「发现」中安装</h4>
+          <h4>① 从 npm 安装</h4>
+          <p class="k">版本写死，最省事</p>
+          <p>已发布至 npm registry，一条命令即可：</p>
+          <pre>dsh plugin --profile desktop add ^
+  dsh-plugin-lianjing@2.0.2</pre>
+          <p class="hint">版本号固定，不会被动升级；需能连上 registry.npmjs.org。</p>
+        </div>
+        <div class="way">
+          <h4>② 于「发现」中安装</h4>
           <p class="k">不必动用命令行</p>
           <p>进入插件 → 发现 → 右上「索引源」→ 添加索引源，粘贴下列地址：</p>
           <pre>https://cdn.jsdelivr.net/gh/
@@ -245,7 +253,7 @@
           <p class="hint">列表中即出现「莲鲸」，点安装即可。</p>
         </div>
         <div class="way">
-          <h4>② 安装打包好的文件</h4>
+          <h4>③ 安装打包好的文件</h4>
           <p class="k">离线可用，版本固定</p>
           <p>于 Releases 下载 tgz 或 zip，任一皆可，随后执行：</p>
           <pre>dsh plugin --profile desktop add ^
@@ -253,7 +261,7 @@
           <p class="hint">路径改为文件实际所在位置。</p>
         </div>
         <div class="way">
-          <h4>③ 自源码安装</h4>
+          <h4>④ 自源码安装</h4>
           <p class="k">欲改其形者用之</p>
           <pre>git clone https://github.com/
   33333cheche-web/dsh-plugin-lianjing.git

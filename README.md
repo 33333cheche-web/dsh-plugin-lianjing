@@ -1,5 +1,7 @@
 # 莲鲸 · 陪你干活的桌宠
 
+[![npm](https://img.shields.io/npm/v/dsh-plugin-lianjing?label=npm&color=b8945c)](https://www.npmjs.com/package/dsh-plugin-lianjing) [![Pages](https://img.shields.io/badge/%E4%BB%8B%E7%BB%8D%E9%A1%B5-online-b8945c)](https://33333cheche-web.github.io/dsh-plugin-lianjing/)
+
 我在屏幕右下角养了条鲸。
 
 她坐在莲台上打坐，闭着眼，头发是海的颜色。多数时候她不出声——我敲代码、放 agent 出去跑、回来等结果，她就在旁边陪着；想看她一眼，点一下，她才抬眼。
@@ -126,15 +128,24 @@ DSH 一开就是四五个会话，每个会话底下又挂几个子 agent：跑�
 
 要 **DSH 桌面版**（Windows）。
 
-先把丑话说前面：npm 上还没发：注册账号要过 www.npmjs.com 那关，国内经常打不开。所以官方「发现」里搜不到她，得走下面三条路之一。装法都不复杂，挑一条顺手的：
+她已经发布到 npm（`dsh-plugin-lianjing@2.0.2`）。下面四条路任挑一条：
 
-1. **有安装包**：下载 → 一条命令（最省事，给同事也这么发）
-2. **想点着装**：DSH 里加一个索引源，之后在「发现」里点「安装」
-3. **想改着玩**：链接本地源码，改完刷新页面就生效
+1. **从 npm 装**：一条命令，版本写死（最省事）
+2. **有安装包**：Releases 下载 → 一条命令（断网也能装，给同事也这么发）
+3. **想点着装**：DSH 里加一个索引源，之后在「发现」里点「安装」
+4. **想改着玩**：链接本地源码，改完刷新页面就生效
 
-三种方式殊途同归：都会把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。
+四种方式殊途同归：都会把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。
 
-**方式一：安装包（给同事最省事）**
+**方式一：从 npm 装**
+
+```powershell
+dsh plugin --profile desktop add dsh-plugin-lianjing@2.0.2
+```
+
+版本号写死，不会因为发了新版就被动升级。装不下来的话多半是国内连不上 `registry.npmjs.org`，换下面几条。
+
+**方式二：安装包（断网可用，给同事最省事）**
 
 到 [Releases](https://github.com/33333cheche-web/dsh-plugin-lianjing/releases) 下载 `dsh-plugin-lianjing-2.0.2.tgz`（或 `.zip`，内容一样），然后：
 
@@ -142,7 +153,7 @@ DSH 一开就是四五个会话，每个会话底下又挂几个子 agent：跑�
 dsh plugin --profile desktop add "D:\下载\dsh-plugin-lianjing-2.0.2.tgz"
 ```
 
-**方式二：在 DSH 里点着装（不用命令行，也不用 npm）**
+**方式三：在 DSH 里点着装（不用命令行，也不用 npm）**
 
 插件 → **发现** → 右上「索引源」/「管理索引源…」→ **添加索引源**，粘贴这份索引的地址：
 
@@ -154,7 +165,7 @@ https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/inde
 
 > 用 jsDelivr 而不是 `raw.githubusercontent.com`，是因为后者在国内经常连不上。索引本身（`market/index.json`）就是[格式 1](https://github.com/33333cheche-web/dsh-plugin-lianjing/blob/main/market/index.json) 的插件市场索引，DSH 自带的校验器能直接读。
 
-**方式三：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
+**方式四：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
 
 ```powershell
 git clone https://github.com/33333cheche-web/dsh-plugin-lianjing.git
