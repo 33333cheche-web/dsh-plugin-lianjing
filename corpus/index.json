@@ -1,12 +1,13 @@
 {
   "version": 2,
   "edition": "汉文大藏经通行本 · 逐句分科",
-  "note": "每个 sutra 文件的 text 字段为经文原文，逐字取自通行藏本；gist 为逐句释义，terms 为名相，practice 为当天可做的观察练习。",
+  "note": "每个 sutra 文件的 text 字段为经文原文，逐字取自通行藏本；gist 为逐句释义，terms 为名相，practice 为当天可做的观察练习。联网取回的草稿只有原文，释义留空待补。",
   "sutras": [
     "xin-jing.json",
     "jin-gang-jing.json",
     "pu-men-pin.json",
     "ji-xiang-jing.json",
-    "amituo-jing.json"
+    "amituo-jing.json",
+    "si-shi-er-zhang-jing.json"
   ]
 }

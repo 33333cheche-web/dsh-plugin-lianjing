@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-lianjing",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "莲鲸 · 陪你干活的桌宠：一只在莲台上打坐的鲸鱼娘，浮在屏幕角落，替你看住所有 agent——正在跑的会话、子任务进度、token 和耗时一眼能看到，点一下跳回对应对话；闲下来陪你敲两下木鱼，顺手翻两页佛经。网页浮层和 Windows 桌面悬浮壳两套，尺寸三档可缩。",
   "icon": "./icon.png",
   "keywords": [

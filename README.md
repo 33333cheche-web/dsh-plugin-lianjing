@@ -76,8 +76,10 @@
 
 **方式一：安装包（给同事最省事）**
 
+到 [Releases](https://github.com/33333cheche-web/dsh-plugin-lianjing/releases) 下载 `dsh-plugin-lianjing-2.0.1.tgz`（或 `.zip`，内容一样），然后：
+
 ```powershell
-dsh plugin --profile desktop add "D:\tools\dsh-plugin-lianjing-2.0.0.tgz"
+dsh plugin --profile desktop add "D:\下载\dsh-plugin-lianjing-2.0.1.tgz"
 ```
 
 **方式二：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
