@@ -128,16 +128,28 @@ DSH 一开就是四五个会话，每个会话底下又挂几个子 agent：跑�
 
 要 **DSH 桌面版**（Windows）。
 
-她已经发布到 npm（`dsh-plugin-lianjing@2.0.2`）。下面四条路任挑一条：
+她已经发布到 npm（`dsh-plugin-lianjing@2.0.2`）。最省事是在 DSH 里搜包名，下面四条路任挑一条：
 
-1. **从 npm 装**：一条命令，版本写死（最省事）
-2. **有安装包**：Releases 下载 → 一条命令（断网也能装，给同事也这么发）
-3. **想点着装**：DSH 里加一个索引源，之后在「发现」里点「安装」
+1. **在 DSH 里搜**：插件 → 发现 → 搜 `dsh-plugin-lianjing` → 点安装（最省事）
+2. **从 npm 装**：一条命令，版本写死
+3. **有安装包**：Releases 下载 → 一条命令（断网也能装，给同事也这么发）
 4. **想改着玩**：链接本地源码，改完刷新页面就生效
 
 四种方式殊途同归：都会把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。
 
-**方式一：从 npm 装**
+**方式一：在 DSH 里搜包名（最省事，不用命令行）**
+
+插件 → **发现** → 搜索框里输入 `dsh-plugin-lianjing`，找到「莲鲸」，点**安装**。
+
+搜不到的话，先加一份索引源再搜：插件 → 发现 → 右上「索引源」→ **添加索引源**，粘贴：
+
+```
+https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/index.json
+```
+
+索引里记的是固定到提交的 `git+https` 地址，装到的是对应版本，不会跟着 main 跑。用 jsDelivr 而不是 `raw.githubusercontent.com`，因为后者国内常连不上。
+
+**方式二：从 npm 装**
 
 ```powershell
 dsh plugin --profile desktop add dsh-plugin-lianjing@2.0.2
@@ -145,25 +157,13 @@ dsh plugin --profile desktop add dsh-plugin-lianjing@2.0.2
 
 版本号写死，不会因为发了新版就被动升级。装不下来的话多半是国内连不上 `registry.npmjs.org`，换下面几条。
 
-**方式二：安装包（断网可用，给同事最省事）**
+**方式三：安装包（断网可用，给同事最省事）**
 
 到 [Releases](https://github.com/33333cheche-web/dsh-plugin-lianjing/releases) 下载 `dsh-plugin-lianjing-2.0.2.tgz`（或 `.zip`，内容一样），然后：
 
 ```powershell
 dsh plugin --profile desktop add "D:\下载\dsh-plugin-lianjing-2.0.2.tgz"
 ```
-
-**方式三：在 DSH 里点着装（不用命令行，也不用 npm）**
-
-插件 → **发现** → 右上「索引源」/「管理索引源…」→ **添加索引源**，粘贴这份索引的地址：
-
-```
-https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/index.json
-```
-
-确定后「莲鲸」会出现在列表里，点**安装**即可。索引里记的是固定到提交的 `git+https` 地址，装到的就是对应版本，不会跟着 main 乱跑。
-
-> 用 jsDelivr 而不是 `raw.githubusercontent.com`，是因为后者在国内经常连不上。索引本身（`market/index.json`）就是[格式 1](https://github.com/33333cheche-web/dsh-plugin-lianjing/blob/main/market/index.json) 的插件市场索引，DSH 自带的校验器能直接读。
 
 **方式四：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
 

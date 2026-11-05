@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>莲鲸 · 陪着 DSH 一起干活的桌宠</title>
-<meta name="description" content="莲鲸是一只常驻 DSH 窗口右下角的桌宠。功课面板逐项呈现任务状态，敲木鱼记一分功德，六部经可逐句阅读并各自记录进度。">
+<title>莲鲸 · 坐在莲台上，替你看住功课进度</title>
+<meta name="description" content="在 DSH 插件「发现」里搜 dsh-plugin-lianjing 即可安装。常驻窗口右下角，逐项呈现任务状态、记录功德、逐句读经。">
 <meta property="og:type" content="website">
-<meta property="og:title" content="莲鲸 · 陪着 DSH 一起干活的桌宠">
-<meta property="og:description" content="任务状态、功德记录、读经进度，三处各自独立。Windows，免费 MIT。">
+<meta property="og:title" content="莲鲸 · 坐在莲台上，替你看住功课进度">
+<meta property="og:description" content="任务状态、功德记录、读经进度，三处各自独立。Windows，免费 MIT，npm 与 DSH 发现均可安装。">
 <meta property="og:image" content="https://33333cheche-web.github.io/dsh-plugin-lianjing/img/poster-adult-1080x1920.png">
 <meta name="twitter:card" content="summary_large_image">
 <style>
@@ -232,32 +232,30 @@
 
   <section id="install">
     <h2 class="serif">安装</h2>
-    <p class="h2-sub">四条路，择其一。</p>
+    <p class="h2-sub">四条路，择其一。装在 DSH 里最省事。</p>
     <div class="install">
       <div class="ways">
         <div class="way">
-          <h4>① 从 npm 安装</h4>
-          <p class="k">版本写死，最省事</p>
-          <p>已发布至 npm registry，一条命令即可：</p>
-          <pre>dsh plugin --profile desktop add ^
-  dsh-plugin-lianjing@2.0.2</pre>
-          <p class="hint">版本号固定，不会被动升级；需能连上 registry.npmjs.org。</p>
+          <h4>① 在 DSH 里搜包名</h4>
+          <p class="k">最省事，不用命令行</p>
+          <p>插件 → 发现 → 搜索 <code style="background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;">dsh-plugin-lianjing</code>，找到「莲鲸」点安装。</p>
+          <p class="hint">搜不到就先加一份索引源：<br>
+            <span style="word-break:break-all;">cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/index.json</span></p>
         </div>
         <div class="way">
-          <h4>② 于「发现」中安装</h4>
-          <p class="k">不必动用命令行</p>
-          <p>进入插件 → 发现 → 右上「索引源」→ 添加索引源，粘贴下列地址：</p>
-          <pre>https://cdn.jsdelivr.net/gh/
-33333cheche-web/dsh-plugin-lianjing
-@main/market/index.json</pre>
-          <p class="hint">列表中即出现「莲鲸」，点安装即可。</p>
+          <h4>② 从 npm 安装</h4>
+          <p class="k">版本写死，不随新版变动</p>
+          <p>包已发布到 npm registry，一条命令：</p>
+          <pre>dsh plugin --profile desktop add ^
+  dsh-plugin-lianjing@2.0.2</pre>
+          <p class="hint">需要能连上 registry.npmjs.org。</p>
         </div>
         <div class="way">
           <h4>③ 安装打包好的文件</h4>
           <p class="k">离线可用，版本固定</p>
           <p>于 Releases 下载 tgz 或 zip，任一皆可，随后执行：</p>
           <pre>dsh plugin --profile desktop add ^
-  "D:\下载\dsh-plugin-lianjing-2.0.2.tgz"</pre>
+  "D:\\下载\\dsh-plugin-lianjing-2.0.2.tgz"</pre>
           <p class="hint">路径改为文件实际所在位置。</p>
         </div>
         <div class="way">
@@ -266,10 +264,9 @@
           <pre>git clone https://github.com/
   33333cheche-web/dsh-plugin-lianjing.git
 dsh plugin --profile desktop add ^
-  "link:D:\path\to\dsh-plugin-lianjing"</pre>
+  "link:D:\\path\\to\\dsh-plugin-lianjing"</pre>
           <p class="hint">改动页面后刷新即生效；若动及宿主，需重启 DSH。</p>
         </div>
-      </div>
       <p class="hint" style="margin-top:22px;">
         装毕须将 DSH 完全退出（托盘图标一并退出），否则她不会现身。
         不再需要时：<code style="background:rgba(0,0,0,.05);padding:1px 6px;border-radius:5px;">dsh plugin --profile desktop remove dsh-plugin-lianjing</code>
