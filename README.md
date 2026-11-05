@@ -14,6 +14,28 @@
 
 ---
 
+## 长这样
+
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/docs/shots/pet.png" width="560" alt="莲鲸待机：莲台上打坐，下面是下次读经倒计时和已积功德">
+</p>
+
+**功课面板**——「手上的活」按项目串成树，每行是会话、子任务进度、token 合计和最后活动时间：
+
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/docs/shots/work-panel.png" width="420" alt="功课面板：项目、会话、token 与耗时">
+</p>
+
+**读经卡片**——浅杏古书色，六部经可切，逐句读、释义、名相、练习：
+
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/docs/shots/sutra-card.png" width="480" alt="读经卡片：佛说四十二章经原文">
+</p>
+
+> 图是桌面壳（大档 100%）在 Windows 上的实拍；网页浮层长得一样，只是跟着 DSH 窗口走。
+
+---
+
 ## 顺便读两句经
 
 她兜里揣着一张**浅杏古书卡片**：一段经文原文、一段逐句释义、几条名相解释、一个当天能做的练习。「逐句读」可以把几部经一部一部读完，各自记进度。
