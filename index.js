@@ -9,7 +9,7 @@
  * 本阶段不做模型调用：卡片内容全部来自随包语料，离线可用、可离线校验。
  * 只 import Node 内置模块，保证能从 profile 的 node_modules 直接加载。
  */
-import { readFile, writeFile, rename, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, stat, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,6 +80,22 @@ const SKILL_NAME = 'lianjing-vademecum';
 const DAY = 86400000;
 
 export class LianjingError extends Error {}
+
+/**
+ * 原子写：先写同目录下的唯一临时文件，再 rename 覆盖。
+ * 崩在写盘中间也不会留下半截 JSON（固定 .tmp 名字在多实例下会互撞）。
+ */
+async function writeAtomic(target, text) {
+  await mkdir(dirname(target), { recursive: true });
+  const tmp = `${target}.${process.pid}.${Date.now().toString(36)}.tmp`;
+  try {
+    await writeFile(tmp, text, 'utf8');
+    await rename(tmp, target);
+  } catch (error) {
+    try { await rm(tmp, { force: true }); } catch { /* 临时文件已经没了 */ }
+    throw error;
+  }
+}
 
 /** 去掉 SKILL.md 的 YAML frontmatter。 */
 export function stripFrontmatter(text) {
@@ -305,9 +321,7 @@ export function apply(ctx, config) {
         });
         const dir = dirname(statePath);
         await mkdir(dir, { recursive: true });
-        const tmp = `${statePath}.tmp`;
-        await writeFile(tmp, payload, 'utf8');
-        await rename(tmp, statePath);
+        await writeAtomic(statePath, payload);
       } catch (error) {
         log('warn', `状态写入失败：${error?.message ?? error}`);
       }
@@ -458,12 +472,12 @@ export function apply(ctx, config) {
       if (!sliced.ok) throw new LianjingError(sliced.error);
       const built = buildDraft(entry, sliced.lines);
       if (!built.ok) throw new LianjingError(built.error);
-      await writeFile(join(corpusDir, `${entry.id}.json`), JSON.stringify(built.doc, null, 2) + '\n', 'utf8');
+      await writeAtomic(join(corpusDir, `${entry.id}.json`), JSON.stringify(built.doc, null, 2) + '\n');
       const manifest = JSON.parse(await readFile(corpusPath, 'utf8'));
       const files = Array.isArray(manifest.sutras) ? manifest.sutras : [];
       if (!files.includes(`${entry.id}.json`)) files.push(`${entry.id}.json`);
       manifest.sutras = files;
-      await writeFile(corpusPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+      await writeAtomic(corpusPath, JSON.stringify(manifest, null, 2) + '\n');
       await loadCorpus();
       const chars = built.doc.segments.reduce((sum, seg) => sum + seg.text.length, 0);
       log('info', `取经完成：${entry.fullTitle}（${built.doc.segments.length} 段 / ${chars} 字）`);
@@ -716,10 +730,18 @@ export function apply(ctx, config) {
     const hit = obsCache.get(id);
     if (hit !== undefined && now - hit.at < ttl) return hit.values;
     let values = {};
+    let observation = null;
     try {
-      const observation = await sessionQuery.observeSession(id);
+      observation = await sessionQuery.observeSession(id);
       values = observation?.projections?.values || {};
     } catch { values = {}; }   // 冷会话读失败就当没有，不往面板里塞报错
+    finally {
+      // 这是一个 lease，DSH 自己用 using 释放；我们不释放会一直提着会话缓存不淘汰
+      try {
+        const dispose = observation?.[Symbol.dispose] ?? observation?.dispose;
+        if (typeof dispose === 'function') dispose.call(observation);
+      } catch { /* 已释放 */ }
+    }
     obsCache.set(id, { at: now, values });
     if (obsCache.size > 240) {
       for (const key of obsCache.keys()) {
@@ -1102,14 +1124,10 @@ export function apply(ctx, config) {
   // 手动启动的壳（桌面快捷方式、脚本）Host 是不知道的，靠它自己报到：
   // 否则网页里会再画一只，桌上就站着两只莲鲸。
   let shellBeatAt = 0;
-  let shellBeatPid = 0;
   const SHELL_BEAT_TTL = 45000;
 
-  const externalShellAlive = () => {
-    if (!shellBeatAt || Date.now() - shellBeatAt > SHELL_BEAT_TTL) return false;
-    if (!shellBeatPid) return true;
-    try { process.kill(shellBeatPid, 0); return true; } catch { return false; }
-  };
+  // 只看心跳时间：心跳里不再收 pid，也就不存在「拿外部传进来的 pid 去 kill」的通路
+  const externalShellAlive = () => !!shellBeatAt && Date.now() - shellBeatAt <= SHELL_BEAT_TTL;
 
   // 「站起来了」以壳自己的心跳为准：进程起来了不等于窗口画出来了（冷启动约 2 秒），
   // 这期间网页里那只不能先隐身，否则就是「点了放她到桌面，人不见了」。
@@ -1198,8 +1216,10 @@ export function apply(ctx, config) {
       // 地址给错了壳是能画出来的，只是永远「静坐中 / 已积功德 0」——
       // 与其让她在桌上当个假人，不如当场说清楚。
       const reachable = await Promise.race([
-        fetch(`${safeOrigin}/dsh-lianjing/pet.json`, { signal: AbortSignal.timeout(1500) })
-          .then((response) => response.ok).catch(() => false),
+        fetch(`${safeOrigin}/dsh-lianjing/pet.json`, {
+          headers: { 'x-dsh-lianjing': '1' },
+          signal: AbortSignal.timeout(1500),
+        }).then((response) => response.ok).catch(() => false),
         new Promise((resolve) => setTimeout(() => resolve(null), 1800)),
       ]);
       if (reachable === false) {
@@ -1221,21 +1241,26 @@ export function apply(ctx, config) {
       shellChild = null;
       shellOrigin = null;
     }
-    // 自己报到的壳也要能收回来
-    if (externalShellAlive() && shellBeatPid) {
-      try { process.kill(shellBeatPid); } catch { /* 已退出 */ }
-    }
+    // 自己报到的壳不再由宿主杀：心跳里不接受 pid（否则本机任意进程都能借宿主杀任意 PID），
+    // 外部壳靠壳自己「连续几次心跳失败就自行退出」来收尾。
     shellBeatAt = 0;
-    shellBeatPid = 0;
     return { ok: true, ...shellStatus() };
   };
 
   const shellHeartbeat = (body) => {
-    const pid = Number(body?.pid);
-    shellBeatPid = Number.isInteger(pid) && pid > 0 ? pid : 0;
+    // 只记「有人活着」，不记 pid、不拿它去 kill；body 仅为兼容旧壳保留
+    void body;
     shellBeatAt = Date.now();
     return { ok: true, ...shellStatus() };
   };
+
+  // 插件被停用/卸载时把桌面壳一起收掉：否则窗口会留着，轮询一组已经没了的接口
+  ctx.effect(() => () => {
+    if (!shellChild) return;
+    try { shellChild.kill(); } catch { /* 已退出 */ }
+    shellChild = null;
+    shellOrigin = null;
+  }, 'lianjing.shell-child');
 
   if (cfg.publicRoutes) {
     ctx.inject?.(['webServer'], (webCtx) => {
@@ -1244,6 +1269,16 @@ export function apply(ctx, config) {
         log('debug', '公开路由不可用（宿主无 webServer）');
         return;
       }
+      // 回环路由只给本机的桌面壳用，三道门一起上：
+      //   1) Host 必须是回环地址 —— 挡 DNS rebinding（evil.com 解析到 127.0.0.1）；
+      //   2) 必须带 x-dsh-lianjing:1 —— 跨站页面发不出自定义头，普通 CSRF 预检也不带；
+      //   3) POST 必须是 application/json —— 挡表单跨站提交。
+      // 网页端不用这套，它走的是宿主带鉴权的 /api/dsh-lianjing.*。
+      const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost|\[::1\])(:\d{1,5})?$/i;
+      const deny = (res) => {
+        res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('forbidden');
+      };
       const register = (path, methods, handler) => server.register({
         kind: 'exact',
         path,
@@ -1253,13 +1288,11 @@ export function apply(ctx, config) {
             res.end('method not allowed');
             return;
           }
-          if (req.method === 'POST') {
-            const type = String(req.headers['content-type'] || '');
-            if (!type.includes('application/json') || req.headers['x-dsh-lianjing'] !== '1') {
-              res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
-              res.end('forbidden');
-              return;
-            }
+          if (!LOOPBACK_HOST.test(String(req.headers.host || ''))) return deny(res);
+          if (req.headers['sec-fetch-site'] === 'cross-site') return deny(res);
+          if (req.headers['x-dsh-lianjing'] !== '1') return deny(res);
+          if (req.method === 'POST' && !String(req.headers['content-type'] || '').includes('application/json')) {
+            return deny(res);
           }
           try {
             const chunks = [];

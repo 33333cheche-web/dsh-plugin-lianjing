@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 wocheng
+Copyright (c) 2026 33333cheche-web
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-经文本身为公有领域文本（玄奘、鸠摩罗什、法舫译本，及大正藏编辑本）。
-本仓库中的释义（gist）、名相（terms）、练习（practice）为本项目另行撰写，
-随代码一同以 MIT 许可发布。立绘图片由 AI 生成，可自由取用。

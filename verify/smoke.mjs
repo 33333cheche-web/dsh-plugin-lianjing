@@ -236,7 +236,13 @@ check('上方放不下会往下开', clientSource.includes('data-drop') && clien
 check('卡片高度按剩余空间收', clientSource.includes('setCardMax') && clientSource.includes('spaceUp'));
 check('小屏有专门的宽度回退', clientSource.includes('@media (max-width:560px)'));
 check('壳自己报到，避免两只莲鲸', hostSource.includes('externalShellAlive') && shellSource.includes('Send-Heartbeat'));
-check('壳心跳带 pid 能收回', shellSource.includes('pid = $PID') && hostSource.includes('shellHeartbeat'));
+check('壳心跳照旧报到', shellSource.includes("action = 'heartbeat'") && hostSource.includes('shellHeartbeat'));
+// 心跳里的 pid 不能拿去 kill：本机任意进程都能发带自定义头的 POST，等于借宿主杀任意 PID
+check('宿主不再按心跳 pid 杀进程', !/shellBeatPid\s*=/.test(hostSource) && !hostSource.includes('process.kill(shellBeatPid'));
+// 回环路由要三道门：Host 白名单 + 自定义头 + POST 的 JSON 类型
+check('回环路由校验 Host', hostSource.includes('LOOPBACK_HOST.test'));
+check('回环路由全方法要自定义头', /x-dsh-lianjing'\] !== '1'\) return deny/.test(hostSource));
+check('壳保活靠自带退出', shellSource.includes('BeatFails') && shellSource.includes('$window.Close()'));
 // 卡片挂在立绘的 div 里，不拦冒泡的话点卡片里任何按钮都会冒到立绘上被当成「收起卡片」
 check('卡片拦下冒泡，点按钮不会收起', /className: 'fj-card'[\s\S]{0,700}?onClick: \(event\) => event\.stopPropagation\(\)/.test(clientJs));
 check('卡片入场动画不再覆盖定位', !/@keyframes fj-in\{from\{opacity:0;transform/.test(clientJs));

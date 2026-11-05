@@ -246,15 +246,15 @@ function New-SutraChip {
 }
 
 function Invoke-PetApi {
-  param([string]$Method = 'GET', [string]$Url, $Body = $null)
+  param([string]$Method = 'GET', [string]$Url, $Body = $null, [int]$TimeoutSec = 20)
   $headers = @{ 'x-dsh-lianjing' = '1' }
   # POST 必须带 application/json 的 body，否则插件的 CSRF 守卫会直接 403。
   if ($Method -ne 'GET') {
     if ($null -eq $Body) { $Body = @{} }
     return Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -ContentType 'application/json' `
-      -Body ($Body | ConvertTo-Json -Compress) -TimeoutSec 20
+      -Body ($Body | ConvertTo-Json -Compress) -TimeoutSec $TimeoutSec
   }
-  return Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -TimeoutSec 20
+  return Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -TimeoutSec $TimeoutSec
 }
 
 # --- 窗口 -------------------------------------------------------------------
@@ -1190,8 +1190,11 @@ function Step-Page {
   $script:PinnedId = $target.id
   Render-Card
   if ($target -and -not $target.read) {
-    try { Invoke-PetApi -Method 'POST' -Url $ReadUrl -Body @{ id = $target.id } | Out-Null } catch { }
-    $script:State = Invoke-PetApi -Url $StateUrl
+    # 标已读丢后台，顺手刷新一次状态（后台回来了会重画卡片）
+    $null = Start-BgApi -Key 'read' -Method 'POST' -Url $ReadUrl -Body @{ id = $target.id } -TimeoutSec 8 -OnDone {
+      param($payload, $failed)
+      if (-not $failed) { Refresh-State | Out-Null }
+    }
     Update-PetImage
   }
 }
@@ -1201,22 +1204,124 @@ $script:ShowExtra = $true
 $script:PageIndex = 0
 $script:PinnedId = $null
 
-function Refresh-State {
+# --- 后台请求 ---------------------------------------------------------------
+# 卡片上的动作（翻页 / 取经 / 刷新 / 心跳 / 标记已读）一律丢到后台 runspace 里跑，
+# UI 线程每 600ms（workTimer）统一收尾。宿主卡住、断网、取经抓网页慢的时候，
+# 窗口照样能拖、能点，不会出现「点了半天没反应」的假死。
+$script:BgRunspaces = @{}
+$script:BgJobs = @{}
+$script:BgScript = @'
+param([string]$Method, [string]$Url, [string]$BodyJson, [int]$TimeoutSec)
+$h = @{ 'x-dsh-lianjing' = '1' }
+if ($Method -eq 'POST') {
+  if (-not $BodyJson) { $BodyJson = '{}' }
+  Invoke-RestMethod -Method 'POST' -Uri $Url -Headers $h -ContentType 'application/json' -Body $BodyJson -TimeoutSec $TimeoutSec
+} else {
+  Invoke-RestMethod -Method 'GET' -Uri $Url -Headers $h -TimeoutSec $TimeoutSec
+}
+'@
+
+function Start-BgApi {
+  param(
+    [string]$Key,
+    [string]$Method,
+    [string]$Url,
+    $Body = $null,
+    [scriptblock]$OnDone = $null,
+    [int]$TimeoutSec = 8
+  )
+  if ($script:BgJobs.ContainsKey($Key)) {
+    $old = $script:BgJobs[$Key]
+    if (-not $old.handle.IsCompleted) { return $false }   # 上一单还没回来，这次丢掉
+    try { $old.ps.Dispose() } catch { }
+    $script:BgJobs.Remove($Key)
+  }
   try {
-    $script:State = Invoke-PetApi -Url $StateUrl
-    $txtStatus.Text = ''
-    if (-not $script:ShowingStudy) { Render-Card }
-    # 光点不消失：有未读亮一点，没未读暗一点（它同时也是展开卡片的入口）
-    $badge.Opacity = 0.60
-    if ($script:State.unread -gt 0) { $badge.Opacity = 1.0 }
-    Update-PetImage
-    Update-KnockCount
-    Request-KnockSprite
+    $rs = $script:BgRunspaces[$Key]
+    $rsState = ''
+    if ($rs) { $rsState = [string]$rs.RunspaceStateInfo.State }
+    if ($rsState -ne 'Opened') {
+      try { if ($rs) { $rs.Dispose() } } catch { }
+      $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+      $rs = [runspacefactory]::CreateRunspace($iss)
+      $rs.Open()
+      $script:BgRunspaces[$Key] = $rs
+    }
+    $ps = [powershell]::Create()
+    $ps.Runspace = $rs
+    [void]$ps.AddScript($script:BgScript)
+    [void]$ps.AddArgument($Method)
+    [void]$ps.AddArgument($Url)
+    if ($null -eq $Body) { [void]$ps.AddArgument('') }
+    else { [void]$ps.AddArgument(($Body | ConvertTo-Json -Compress -Depth 4)) }
+    [void]$ps.AddArgument($TimeoutSec)
+    $handle = $ps.BeginInvoke()
+    $script:BgJobs[$Key] = @{ ps = $ps; handle = $handle; at = [DateTime]::Now; onDone = $OnDone }
     return $true
   } catch {
-    Show-Error '连不上 DSH，显示的是最后一条'
     return $false
   }
+}
+
+function Complete-BgApis {
+  # UI 线程每拍调一次：收已经回来的后台请求，回填界面
+  if ($script:BgJobs.Count -eq 0) { return }
+  foreach ($key in @($script:BgJobs.Keys)) {
+    $job = $script:BgJobs[$key]
+    if ($null -eq $job) { continue }
+    if (-not $job.handle.IsCompleted) {
+      # 兜底：15 秒还没回来就丢弃，绝不让这类请求把界面吊住
+      if (([DateTime]::Now - $job.at).TotalSeconds -gt 15) {
+        try { $job.ps.Stop() } catch { }
+        try { $job.ps.Dispose() } catch { }
+        $script:BgJobs.Remove($key)
+        if ($job.onDone) { try { & $job.onDone $null $true } catch { } }
+      }
+      continue
+    }
+    $script:BgJobs.Remove($key)
+    $payload = $null
+    $failed = $false
+    try {
+      $out = $job.ps.EndInvoke($job.handle)
+      if ($out -and $out.Count -gt 0) { $payload = $out[0] }
+    } catch {
+      $failed = $true
+    } finally {
+      try { $job.ps.Dispose() } catch { }
+    }
+    if ($job.onDone) { try { & $job.onDone $payload $failed } catch { } }
+  }
+}
+
+function Apply-StatePayload {
+  param($Payload)
+  if ($null -eq $Payload) {
+    Show-Error '连不上 DSH，显示的是最后一条'
+    return
+  }
+  $script:State = $Payload
+  $txtStatus.Text = ''
+  if (-not $script:ShowingStudy) { Render-Card }
+  # 光点不消失：有未读亮一点，没未读暗一点（它同时也是展开卡片的入口）
+  $badge.Opacity = 0.60
+  if ($script:State.unread -gt 0) { $badge.Opacity = 1.0 }
+  Update-PetImage
+  Update-KnockCount
+  Request-KnockSprite
+}
+
+function Refresh-State {
+  # 异步拉一次状态；回来由 Apply-StatePayload 更新界面（失败就留着上一条）
+  $null = Start-BgApi -Key 'state' -Method 'GET' -Url $StateUrl -TimeoutSec 8 -OnDone {
+    param($payload, $failed)
+    if ($failed) {
+      Show-Error '连不上 DSH，显示的是最后一条'
+      return
+    }
+    Apply-StatePayload $payload
+  }
+  return $true
 }
 
 # --- 功课：拉数据 -------------------------------------------------------------
@@ -1294,6 +1399,8 @@ function Complete-WorkFetch {
 
 function Update-Work {
   $wasFailed = $script:WorkFailed
+  # 卡片动作（翻页 / 取经 / 刷新 / 心跳 / 标已读）的后台结果统一在这里收
+  Complete-BgApis
   # 「在 DSH 里打开这个对话」的结果回填（runspace 收尾 + 提示到期）
   Update-OpenSession
   $applied = Complete-WorkFetch
@@ -1326,8 +1433,17 @@ function Update-Work {
 $script:KnockQueue = [System.Collections.Generic.Queue[int]]::new()
 $script:KnockPending = $null
 $script:KnockRunspace = $null
-$script:KnockSound = $null      # SoundPlayer，启动时下好 19KB 的 wav 预加载
+$script:KnockSound = $null      # SoundPlayer
 $script:KnockCount = 0          # 服务端返回的累计敲击数
+# 装好的插件本来就在 assets\ 里带着 muyu.wav：先用本地的，别每次启动都去网上下一遍
+try {
+  $localWav = Join-Path $AssetDir 'muyu.wav'
+  if (Test-Path $localWav) {
+    $localPlayer = New-Object System.Media.SoundPlayer -ArgumentList $localWav
+    $localPlayer.Load()
+    $script:KnockSound = $localPlayer
+  }
+} catch { $script:KnockSound = $null }
 $script:KnockFloats = New-Object System.Collections.ArrayList
 # 「在 DSH 里打开这个对话」：和敲木鱼一样丢后台 runspace，UI 线程只负责收结果。
 $script:OpenPending = $null
@@ -1895,7 +2011,7 @@ function Set-CardTab {
     if ($script:ShowingCard) {
       $shown = Get-PageCard
       if ($shown -and -not $shown.read) {
-        try { Invoke-PetApi -Method 'POST' -Url $ReadUrl -Body @{ id = $shown.id } | Out-Null } catch { }
+        $null = Start-BgApi -Key 'read' -Method 'POST' -Url $ReadUrl -Body @{ id = $shown.id } -TimeoutSec 8
       }
     }
   }
@@ -2631,7 +2747,7 @@ function Toggle-Card {
     Request-WorkUpdate
     $shown = Get-PageCard
     if ($shown -and -not $shown.read -and $script:CardTab -eq 'read') {
-      try { Invoke-PetApi -Method 'POST' -Url $ReadUrl -Body @{ id = $shown.id } | Out-Null } catch { }
+      $null = Start-BgApi -Key 'read' -Method 'POST' -Url $ReadUrl -Body @{ id = $shown.id } -TimeoutSec 8
     }
   }
 }
@@ -2641,36 +2757,61 @@ function Invoke-Next {
   if ($script:Busy) { return }
   $script:Busy = $true
   $btnNext.Content = '翻页中…'
-  try {
-    $body = @{}
-    if ($SutraId) { $body['sutraId'] = $SutraId }
-    Invoke-PetApi -Method 'POST' -Url $NextUrl -Body $body | Out-Null
+  $body = @{}
+  if ($SutraId) { $body['sutraId'] = $SutraId }
+  $started = Start-BgApi -Key 'next' -Method 'POST' -Url $NextUrl -Body $body -TimeoutSec 25 -OnDone {
+    param($payload, $failed)
+    $script:Busy = $false
+    $btnNext.Content = '再读一句'
+    if ($failed -or $null -eq $payload) {
+      $txtStatus.Text = '出卡失败 · 连不上 DSH'
+      return
+    }
+    # 宿主正在出卡时会回 202 {running:true, card:null}，别当成功
+    if ($payload.running -and -not $payload.card) {
+      $txtStatus.Text = '正在出卡，稍等一下'
+      Refresh-State | Out-Null
+      return
+    }
     $script:ShowingStudy = $false
     $script:PageIndex = 0
     $script:PinnedId = $null
     Refresh-State | Out-Null
-    Render-Card
-    Update-PetImage
-  } catch {
-    $detail = $_.Exception.Message
-    if ($detail.Length -gt 40) { $detail = $detail.Substring(0, 40) }
-    $txtStatus.Text = "出卡失败 · $detail"
-  } finally {
+  }
+  if (-not $started) {
     $script:Busy = $false
     $btnNext.Content = '再读一句'
+    $txtStatus.Text = '上一个动作还没做完'
   }
 }
 
 # --- 联网取经 ---------------------------------------------------------------
 # 告诉 Host「我站着呢」，否则网页里会再画一只，桌上就两只莲鲸
+$script:BeatFails = 0
 function Send-Heartbeat {
-  try { Invoke-PetApi -Method 'POST' -Url $BeatUrl -Body @{ action = 'heartbeat'; pid = $PID } | Out-Null } catch { }
+  # 心跳也丢后台：宿主没起来时不会把 UI 钉住 20 秒
+  $null = Start-BgApi -Key 'beat' -Method 'POST' -Url $BeatUrl -Body @{ action = 'heartbeat' } -TimeoutSec 6 -OnDone {
+    param($payload, $failed)
+    if (-not $failed -and $null -ne $payload) {
+      $script:BeatFails = 0
+      return
+    }
+    $script:BeatFails++
+    if ($script:BeatFails -eq 2) { Show-Error 'DSH 未连接，正在重试…' }
+    elseif ($script:BeatFails -ge 5) {
+      # 约 100 秒都没人应：自己退，别在桌上留一只永远「静坐中」的
+      try { $window.Close() } catch { }
+    }
+  }
 }
 
+$script:CatalogCache = $null
 function Get-Catalog {
   try {
-    $payload = Invoke-PetApi -Method 'GET' -Url $CatalogUrl
-    return @($payload.items)
+    if ($script:CatalogCache) { return @($script:CatalogCache) }
+    $payload = Invoke-PetApi -Method 'GET' -Url $CatalogUrl -TimeoutSec 4
+    $script:CatalogCache = @($payload.items)
+    return $script:CatalogCache
   } catch {
     return @()
   }
@@ -2681,23 +2822,24 @@ function Invoke-Import {
   if (-not $CatalogId -and -not $Url) { return }
   if ($script:Busy) { return }
   $script:Busy = $true
-  try {
-    $txtStatus.Text = '联网取经中…'
-    # 抓网页要几秒，先把「取经中」这几个字画出来，不然界面像卡死
-    $window.Dispatcher.Invoke([action] {}, [System.Windows.Threading.DispatcherPriority]::Background)
-    $body = @{}
-    if ($Url) { $body['url'] = $Url } else { $body['catalogId'] = $CatalogId }
-    $result = Invoke-PetApi -Method 'POST' -Url $ImportUrl -Body $body
-    Refresh-State | Out-Null
-    Render-Card
-    Update-PetImage
-    $txtStatus.Text = "取回《$($result.title)》· $($result.count) 段"
-  } catch {
-    $detail = $_.Exception.Message
-    if ($detail.Length -gt 40) { $detail = $detail.Substring(0, 40) }
-    $txtStatus.Text = "取经失败 · $detail"
-  } finally {
+  $txtStatus.Text = '联网取经中…'
+  $body = @{}
+  if ($Url) { $body['url'] = $Url } else { $body['catalogId'] = $CatalogId }
+  # 抓网页要几秒，全程在后台跑，卡片照样能点、能拖
+  $started = Start-BgApi -Key 'import' -Method 'POST' -Url $ImportUrl -Body $body -TimeoutSec 50 -OnDone {
+    param($payload, $failed)
     $script:Busy = $false
+    if ($failed -or $null -eq $payload) {
+      $txtStatus.Text = '取经失败 · 连不上 DSH'
+      return
+    }
+    $script:CatalogCache = $null
+    $txtStatus.Text = "取回《$($payload.title)》· $($payload.count) 段"
+    Refresh-State | Out-Null
+  }
+  if (-not $started) {
+    $script:Busy = $false
+    $txtStatus.Text = '上一个动作还没做完'
   }
 }
 
@@ -2997,6 +3139,22 @@ $window.Add_Loaded({
 
 # 退出时把后台 runspace / 飞行中的请求收掉，别留一个孤儿线程
 $window.Add_Closed({
+    # 卡片动作的后台请求 / runspace 一起收掉
+    try {
+      foreach ($key in @($script:BgJobs.Keys)) {
+        $job = $script:BgJobs[$key]
+        if ($job) {
+          try { $job.ps.Stop() } catch { }
+          try { $job.ps.Dispose() } catch { }
+        }
+      }
+      $script:BgJobs = @{}
+      foreach ($key in @($script:BgRunspaces.Keys)) {
+        $rs = $script:BgRunspaces[$key]
+        if ($rs) { try { $rs.Close() } catch { }; try { $rs.Dispose() } catch { } }
+      }
+      $script:BgRunspaces = @{}
+    } catch { }
     try {
       if ($script:WorkPending) {
         $script:WorkPending.ps.Stop()

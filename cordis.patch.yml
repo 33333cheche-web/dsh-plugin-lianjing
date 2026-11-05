@@ -1,7 +1,7 @@
 # dsh-plugin-lianjing bundle patch
 #
 # 1) 插件的 Host 行（client.js 由 package.json 的 dsh.client 字段加载）
-# 2) 佛经学习参谋 preset：新建会话后可直接问经文内容
+# 2) 佛经学习参谋 preset：新建会话后可直接问经文（六部经，含两部原文草稿）
 #
 # 语料与 skill 的绝对路径由 index.js 在运行时按自身包目录计算并注册，
 # 因此这里不需要硬编码用户目录。
@@ -22,7 +22,7 @@
       config:
         id: lianjing
         name: 莲鲸 · 读经参谋
-        description: 内置《心经》逐句语料；回答先引原文（经名 + 句序），再分层释义，最后落到当下的观察练习
+        description: 内置六部汉传经（心经 / 金刚经 / 普门品 / 吉祥经 / 阿弥陀经 / 四十二章经）的逐句语料；回答先引原文（经名 + 句序），再分层释义，最后落到当下的观察练习
         order: 13
         plugins:
           - id: persona
