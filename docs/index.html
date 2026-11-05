@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>莲鲸 · 陪着 DSH 一起干活的桌宠</title>
+<meta name="description" content="莲鲸是一只常驻 DSH 窗口右下角的桌宠。功课面板逐项呈现任务状态，敲木鱼记一分功德，六部经可逐句阅读并各自记录进度。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="莲鲸 · 陪着 DSH 一起干活的桌宠">
+<meta property="og:description" content="任务状态、功德记录、读经进度，三处各自独立。Windows，免费 MIT。">
+<meta property="og:image" content="https://33333cheche-web.github.io/dsh-plugin-lianjing/img/poster-adult-1080x1920.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --paper:#f7f2e7;
+    --paper-2:#fbf8f1;
+    --ink:#3a332a;
+    --ink-2:#6b6152;
+    --muted:#8c8272;
+    --gold:#b8945c;
+    --line:#e3d9c4;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 15% -5%, #fdfaf3 0%, rgba(253,250,243,0) 60%),
+      radial-gradient(900px 500px at 95% 5%, #fbf6ea 0%, rgba(251,246,234,0) 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Microsoft YaHei UI","Segoe UI",system-ui,-apple-system,sans-serif;
+    font-size:15px;
+    line-height:1.8;
+    -webkit-font-smoothing:antialiased;
+  }
+  .serif{font-family:"Noto Serif SC","Songti SC",serif;}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px;}
+  a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);}
+  a:hover{border-bottom-color:var(--gold);color:#241f19;}
+
+  header{padding:26px 0 8px;}
+  .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .top img.brand{width:44px;height:44px;border-radius:12px;box-shadow:0 2px 10px rgba(90,70,40,.12);}
+  .brand-name{font-family:"Noto Serif SC",serif;font-size:24px;letter-spacing:.18em;}
+  .brand-sub{font-size:12px;color:var(--muted);letter-spacing:.22em;text-transform:uppercase;}
+  .top nav{margin-left:auto;display:flex;gap:20px;font-size:13.5px;color:var(--ink-2);}
+  .top nav a{border-bottom:none;}
+
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center;padding:44px 0 26px;}
+  .hero h1{font-family:"Noto Serif SC",serif;font-size:52px;line-height:1.26;letter-spacing:.04em;margin:0 0 10px;font-weight:700;}
+  .hero .kicker{font-size:13px;letter-spacing:.3em;color:var(--gold);margin:0 0 14px;text-transform:uppercase;}
+  .hero .lede{font-size:16.5px;color:var(--ink-2);max-width:30em;margin:0 0 22px;}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 24px;}
+  .badge{font-size:12px;color:var(--ink-2);background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:999px;padding:3px 11px;}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:999px;font-size:14px;border:1px solid transparent;transition:.18s;}
+  .btn.primary{background:#2f2a23;color:#fbf7ee;border-bottom:none;}
+  .btn.primary:hover{background:#413a30;transform:translateY(-1px);}
+  .btn.ghost{border:1px solid var(--line);color:var(--ink);background:rgba(255,255,255,.5);}
+  .btn.ghost:hover{border-color:var(--gold);}
+  .hero-art{display:flex;flex-direction:column;align-items:center;position:relative;}
+  .hero-art img{width:100%;max-width:320px;border-radius:20px;box-shadow:0 18px 50px rgba(90,70,40,.18);border:1px solid rgba(255,255,255,.7);}
+  .hero-art .cap{margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7;text-align:center;}
+
+  section{padding:50px 0;}
+  hr.sep{border:none;border-top:1px solid var(--line);margin:0;}
+  h2{font-family:"Noto Serif SC",serif;font-size:28px;letter-spacing:.05em;margin:0 0 8px;font-weight:700;display:flex;align-items:center;gap:12px;}
+  h2::before{content:"";width:26px;height:2px;background:var(--gold);border-radius:2px;flex:0 0 auto;}
+  h2::after{content:"";height:1px;background:linear-gradient(90deg,var(--line),rgba(227,217,196,0));flex:1;}
+  .h2-sub{color:var(--muted);font-size:13.5px;margin:0 0 28px;}
+
+  .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;}
+  .feat{background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:18px;padding:22px 22px 24px;position:relative;overflow:hidden;transition:.22s;}
+  .feat:hover{transform:translateY(-4px);box-shadow:0 16px 34px rgba(90,70,40,.12);border-color:#d9c9a8;}
+  .feat .sprite{float:right;width:92px;height:auto;margin:-6px -10px 0 8px;filter:drop-shadow(0 6px 12px rgba(90,70,40,.14));}
+  .feat h3{font-family:"Noto Serif SC",serif;font-size:18px;margin:0 0 8px;letter-spacing:.04em;}
+  .feat p{margin:0;font-size:13.5px;color:var(--ink-2);}
+  .feat .quip{display:block;margin-top:10px;font-size:12.5px;color:var(--gold);}
+
+  .wont{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:6px;}
+  .wont div{background:rgba(255,255,255,.45);border:1px dashed var(--line);border-radius:16px;padding:18px 20px;transition:.22s;}
+  .wont div:hover{background:rgba(255,255,255,.75);border-style:solid;border-color:#d9c9a8;transform:translateY(-3px);}
+  .wont h4{margin:0 0 6px;font-size:15px;font-family:"Noto Serif SC",serif;letter-spacing:.03em;}
+  .wont p{margin:0;font-size:13.5px;color:var(--ink-2);}
+
+  .shot{background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:20px;padding:12px;box-shadow:0 14px 40px rgba(90,70,40,.10);}
+  .shot img{display:block;width:100%;border-radius:12px;}
+  .shot .tag{font-size:12px;color:var(--muted);padding:9px 6px 2px;display:flex;justify-content:space-between;gap:12px;}
+  .split{display:grid;grid-template-columns:1.05fr .95fr;gap:34px;align-items:start;margin-top:30px;}
+  .notes{margin:0;padding:0;list-style:none;}
+  .notes li{padding-left:18px;position:relative;margin-bottom:13px;color:var(--ink-2);font-size:14px;}
+  .notes li::before{content:"";position:absolute;left:2px;top:10px;width:6px;height:6px;border-radius:50%;background:var(--gold);}
+  .notes b{color:var(--ink);font-weight:600;}
+
+  .install{background:var(--paper-2);border:1px solid var(--line);border-radius:20px;padding:30px 30px 26px;}
+  .ways{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;}
+  .way h4{margin:0 0 6px;font-size:15px;letter-spacing:.02em;}
+  .way .k{font-size:12px;color:var(--muted);margin:0 0 10px;}
+  .way p{margin:0 0 10px;font-size:13.5px;color:var(--ink-2);}
+  pre{background:#2f2a23;color:#efe7d6;border-radius:12px;padding:13px 14px;font-size:12.2px;line-height:1.7;overflow-x:auto;margin:0;font-family:Consolas,"Cascadia Mono",monospace;}
+  .hint{font-size:12px;color:var(--muted);margin:10px 0 0;}
+
+  footer{padding:38px 0 60px;color:var(--muted);font-size:12.5px;}
+  footer .row{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:20px;}
+
+  @media (max-width:900px){
+    .hero{grid-template-columns:1fr;gap:34px;}
+    .hero h1{font-size:38px;}
+    .feats,.ways,.split,.wont{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <img class="brand" src="img/icon-256.png" alt="莲鲸">
+      <div>
+        <div class="brand-name serif">莲鲸</div>
+        <div class="brand-sub">Lianjing · DSH Desk Pet</div>
+      </div>
+      <nav>
+        <a href="https://github.com/33333cheche-web/dsh-plugin-lianjing">GitHub</a>
+        <a href="https://github.com/33333cheche-web/dsh-plugin-lianjing/releases">下载</a>
+        <a href="#features">功能</a>
+        <a href="#ui">界面</a>
+        <a href="#install">安装</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <p class="kicker">DSH 桌面宠物</p>
+      <h1 class="serif">坐在莲台上，<br>替你看住功课进度</h1>
+      <p class="lede">
+        她常驻 DSH 窗口的右下角。功课面板以项目为纲，逐条列出全部会话：哪一条正在执行、行至第几步、耗去多少 token、历经多久，
+        都记在一张宣纸卡上。点其中一行，即转入对应的对话。
+      </p>
+      <div class="badges">
+        <span class="badge">v2.0.2</span>
+        <span class="badge">Windows · DSH 插件</span>
+        <span class="badge">MIT</span>
+        <span class="badge">网页浮层与桌面窗口</span>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/33333cheche-web/dsh-plugin-lianjing/releases">↓ 下载安装包</a>
+        <a class="btn ghost" href="https://github.com/33333cheche-web/dsh-plugin-lianjing">阅览源码</a>
+      </div>
+    </div>
+    <div class="hero-art">
+      <img src="img/poster-adult-1080x1920.png" alt="莲鲸 · 竖版介绍图">
+      <div class="cap">
+        图为另绘的成人比例版本。桌面上所见图样仍是 Q 版立绘，大档 460×479 像素，中档 368，小档 285，居于右下角。
+      </div>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section id="features">
+    <h2 class="serif">功能</h2>
+    <p class="h2-sub">任务状态、功德记录、读经进度，三处各自独立。</p>
+    <div class="feats">
+      <div class="feat">
+        <img class="sprite" src="img/pet-read.png" alt="">
+        <h3>呈现任务状态</h3>
+        <p>项目、会话、所处步骤、累计耗时与消耗，皆列于一处。任务执行期间，她身后浮现一圈金光并缓缓转动；
+           全部结束时，光环熄灭。</p>
+        <span class="quip">仅作状态提示，不作催促。</span>
+      </div>
+      <div class="feat">
+        <img class="sprite" src="img/pet-knock.png" alt="">
+        <h3>记录功德</h3>
+        <p>点她一下，木鱼作声，浮出一句彩头，功德 +1。</p>
+        <span class="quip">以工作为修行，一声木鱼记一分功德。</span>
+      </div>
+      <div class="feat">
+        <img class="sprite" src="img/pet-idle.png" alt="">
+        <h3>逐句读经</h3>
+        <p>内置心经、金刚经、普门品、吉祥经、阿弥陀经、四十二章经六部，逐句阅读，进度各自记录。</p>
+        <span class="quip">读到何处，均记于名下。</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:0;">
+    <h2 class="serif">约束</h2>
+    <p class="h2-sub">桌面宠物常见的三种打扰，她一概不为。</p>
+    <div class="wont">
+      <div>
+        <h4>不主动打扰</h4>
+        <p>每小时只露面一次。夜半十点至清晨六点静默，一日之内至多十二回。</p>
+      </div>
+      <div>
+        <h4>不干扰操作</h4>
+        <p>卡片浮于界面之上，不参与排版；贴近屏幕边缘时自行内收，屏幕狭小亦可容纳。</p>
+      </div>
+      <div>
+        <h4>不虚构状态</h4>
+        <p>无任务执行时，光环熄灭，不以动效暗示仍在处理，也不虚报进度。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="ui">
+    <h2 class="serif">界面</h2>
+    <p class="h2-sub">右下角常驻一尊小像，点开是一张宣纸卡片。</p>
+    <div class="shot">
+      <img src="img/shot-running.png" alt="莲鲸浮在 DSH 界面右下角">
+      <div class="tag"><span>运行示意：真实 DSH 界面与插件原建立绘合成</span><span>1440 × 940</span></div>
+    </div>
+
+    <div class="split">
+      <div class="shot">
+        <img src="img/shot-card.png" alt="功课卡片">
+        <div class="tag"><span>点开她，默认停在「功课」</span><span>真实截图</span></div>
+      </div>
+      <div>
+        <ul class="notes">
+          <li><b>卡片是浮层。</b>覆盖于界面之上，不参与排版；贴近边缘时向内收，屏幕狭小亦能容纳。</li>
+          <li><b>会话按项目分组。</b>执行中的高亮，已结束的置灰；子任务进度依据会话自身的步数记录，不预设数值。</li>
+          <li><b>点一行即跳转。</b>直接切换至对应的对话，不必回到侧栏逐一翻找。</li>
+          <li><b>定时而作。</b>默认每小时一张，二十二时至次日六时静默，每日至多十二张。</li>
+          <li><b>另有一种形态。</b>独立桌面窗口，关闭 DSH 后仍留在桌角。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section id="install">
+    <h2 class="serif">安装</h2>
+    <p class="h2-sub">三条路，择其一。</p>
+    <div class="install">
+      <div class="ways">
+        <div class="way">
+          <h4>① 于「发现」中安装</h4>
+          <p class="k">不必动用命令行</p>
+          <p>进入插件 → 发现 → 右上「索引源」→ 添加索引源，粘贴下列地址：</p>
+          <pre>https://cdn.jsdelivr.net/gh/
+33333cheche-web/dsh-plugin-lianjing
+@main/market/index.json</pre>
+          <p class="hint">列表中即出现「莲鲸」，点安装即可。</p>
+        </div>
+        <div class="way">
+          <h4>② 安装打包好的文件</h4>
+          <p class="k">离线可用，版本固定</p>
+          <p>于 Releases 下载 tgz 或 zip，任一皆可，随后执行：</p>
+          <pre>dsh plugin --profile desktop add ^
+  "D:\下载\dsh-plugin-lianjing-2.0.2.tgz"</pre>
+          <p class="hint">路径改为文件实际所在位置。</p>
+        </div>
+        <div class="way">
+          <h4>③ 自源码安装</h4>
+          <p class="k">欲改其形者用之</p>
+          <pre>git clone https://github.com/
+  33333cheche-web/dsh-plugin-lianjing.git
+dsh plugin --profile desktop add ^
+  "link:D:\path\to\dsh-plugin-lianjing"</pre>
+          <p class="hint">改动页面后刷新即生效；若动及宿主，需重启 DSH。</p>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:22px;">
+        装毕须将 DSH 完全退出（托盘图标一并退出），否则她不会现身。
+        不再需要时：<code style="background:rgba(0,0,0,.05);padding:1px 6px;border-radius:5px;">dsh plugin --profile desktop remove dsh-plugin-lianjing</code>
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="row">
+      <div>
+        莲鲸 · 陪你做事的桌宠 · v2.0.2 · MIT<br>
+        经文为公有领域文本（玄奘、鸠摩罗什、法舫译本）；释义、名相与练习为本项目另写的学习辅助，非经文原句。
+      </div>
+      <div style="text-align:right;">
+        <a href="https://github.com/33333cheche-web/dsh-plugin-lianjing">github.com/33333cheche-web/dsh-plugin-lianjing</a><br>
+        <a href="https://github.com/33333cheche-web/dsh-plugin-lianjing/releases">Releases · v2.0.2</a>
+      </div>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>

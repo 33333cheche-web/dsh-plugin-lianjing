@@ -6,6 +6,12 @@
 
 她还有正事：**替我看住这一屋子的 agent**。
 
+<p align="center">
+  <a href="https://33333cheche-web.github.io/dsh-plugin-lianjing/"><img src="docs/img/poster-adult-1080x1920.png" width="320" alt="莲鲸介绍页"></a>
+</p>
+
+<p align="center"><a href="https://33333cheche-web.github.io/dsh-plugin-lianjing/">网页版介绍页</a>：功能、界面截图、安装说明都在里面。</p>
+
 ---
 
 ## 正事：一屋子 agent，总得有个看板
