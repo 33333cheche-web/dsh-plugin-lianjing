@@ -1,5 +1,7 @@
 # 莲鲸 · 陪你干活的桌宠
 
+> 线上介绍页（带实拍截图）：<https://33333cheche-web.github.io/dsh-plugin-lianjing/>
+
 [![npm](https://img.shields.io/npm/v/dsh-plugin-lianjing?label=npm&color=b8945c)](https://www.npmjs.com/package/dsh-plugin-lianjing) [![Pages](https://img.shields.io/badge/%E4%BB%8B%E7%BB%8D%E9%A1%B5-online-b8945c)](https://33333cheche-web.github.io/dsh-plugin-lianjing/)
 
 我在屏幕右下角养了条鲸。
