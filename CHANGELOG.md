@@ -1,5 +1,15 @@
 # 更新日志
 
+## 未发布
+
+- 加桌面快捷方式：`desktop/install-shortcut.ps1` 在桌面生成「莲鲸桌宠」，双击跑
+  `desktop/open-pet.ps1`。后者每次现扫本机在监听的 DeepSeek Harness，确认
+  `/dsh-lianjing/pet.json` 在线，再按那个端口拉壳，所以端口变了不用重做快捷方式；
+  已经在跑的那只不会被开成第二只；找不到宿主或插件没加载会弹窗说明原因。
+  图标是 `assets/lianjing.ico`（16–256 共 7 个尺寸，从 `icon-256.png` 生成）。
+- README 安装段对齐事实：npm 上没有这个包，改成「安装包 / 索引源 / 源码」三条路，
+  npm 徽章换成 Release。
+
 ## 2.0.2
 
 对外发布前的收口版本：安全、桌面壳卡顿、发布元数据与文档。

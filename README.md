@@ -2,7 +2,7 @@
 
 > 线上介绍页（带实拍截图）：<https://33333cheche-web.github.io/dsh-plugin-lianjing/>
 
-[![npm](https://img.shields.io/npm/v/dsh-plugin-lianjing?label=npm&color=b8945c)](https://www.npmjs.com/package/dsh-plugin-lianjing) [![Pages](https://img.shields.io/badge/%E4%BB%8B%E7%BB%8D%E9%A1%B5-online-b8945c)](https://33333cheche-web.github.io/dsh-plugin-lianjing/)
+[![Release](https://img.shields.io/github/v/release/33333cheche-web/dsh-plugin-lianjing?label=release&color=b8945c)](https://github.com/33333cheche-web/dsh-plugin-lianjing/releases) [![Pages](https://img.shields.io/badge/%E4%BB%8B%E7%BB%8D%E9%A1%B5-online-b8945c)](https://33333cheche-web.github.io/dsh-plugin-lianjing/)
 
 我在屏幕右下角养了条鲸。
 
@@ -130,36 +130,15 @@ DSH 一开就是四五个会话，每个会话底下又挂几个子 agent：跑�
 
 要 **DSH 桌面版**（Windows）。
 
-她已经发布到 npm（`dsh-plugin-lianjing@2.0.2`）。最省事是在 DSH 里搜包名，下面四条路任挑一条：
+npm 上还没有她，2.0.2 只挂在 GitHub 上。三条路任挑一条：
 
-1. **在 DSH 里搜**：插件 → 发现 → 搜 `dsh-plugin-lianjing` → 点安装（最省事）
-2. **从 npm 装**：一条命令，版本写死
-3. **有安装包**：Releases 下载 → 一条命令（断网也能装，给同事也这么发）
-4. **想改着玩**：链接本地源码，改完刷新页面就生效
+1. **有安装包**：Releases 下载 → 一条命令（断网也能装，给同事也这么发）
+2. **走索引源**：加一行索引地址，再在 DSH 里搜到装
+3. **想改着玩**：链接本地源码，改完刷新页面就生效
 
-四种方式殊途同归：都会把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。
+三种方式殊途同归：都会把插件登记进 profile 的 `dsh.profile.bundles`，不用手改配置。
 
-**方式一：在 DSH 里搜包名（最省事，不用命令行）**
-
-插件 → **发现** → 搜索框里输入 `dsh-plugin-lianjing`，找到「莲鲸」，点**安装**。
-
-搜不到的话，先加一份索引源再搜：插件 → 发现 → 右上「索引源」→ **添加索引源**，粘贴：
-
-```
-https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/index.json
-```
-
-索引里记的是固定到提交的 `git+https` 地址，装到的是对应版本，不会跟着 main 跑。用 jsDelivr 而不是 `raw.githubusercontent.com`，因为后者国内常连不上。
-
-**方式二：从 npm 装**
-
-```powershell
-dsh plugin --profile desktop add dsh-plugin-lianjing@2.0.2
-```
-
-版本号写死，不会因为发了新版就被动升级。装不下来的话多半是国内连不上 `registry.npmjs.org`，换下面几条。
-
-**方式三：安装包（断网可用，给同事最省事）**
+**方式一：安装包（断网可用，给同事最省事）**
 
 到 [Releases](https://github.com/33333cheche-web/dsh-plugin-lianjing/releases) 下载 `dsh-plugin-lianjing-2.0.2.tgz`（或 `.zip`，内容一样），然后：
 
@@ -167,7 +146,19 @@ dsh plugin --profile desktop add dsh-plugin-lianjing@2.0.2
 dsh plugin --profile desktop add "D:\下载\dsh-plugin-lianjing-2.0.2.tgz"
 ```
 
-**方式四：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
+**方式二：索引源（不用命令行）**
+
+直接搜包名是搜不到的，先喂它一份索引：插件 → 发现 → 右上「索引源」→ **添加索引源**，粘贴：
+
+```
+https://cdn.jsdelivr.net/gh/33333cheche-web/dsh-plugin-lianjing@main/market/index.json
+```
+
+保存后再搜 `dsh-plugin-lianjing`，找到「莲鲸」点安装。
+
+索引里记的是固定到提交的 `git+https` 地址，装到的是对应版本，不会跟着 main 跑。用 jsDelivr 而不是 `raw.githubusercontent.com`，因为后者国内常连不上。
+
+**方式三：从源码链接**（自己改着玩用这种，改完刷新页面就生效，宿主的改动重启 DSH 后生效）
 
 ```powershell
 git clone https://github.com/33333cheche-web/dsh-plugin-lianjing.git
@@ -179,6 +170,16 @@ dsh plugin --profile desktop add "link:D:\path\to\dsh-plugin-lianjing"
 **装完必须重启 DSH 桌面应用**（desktop profile 由 Electron 独占），右下角才会出现莲鲸。
 
 在 DSH 的插件列表里，她用的是**自己的形象当图标**（`icon.png`，256×256，从 `assets/icon-256.png` 来的）。
+
+**放一个桌面快捷方式（双击就让她站起来）**
+
+不想每次都去 DSH 里点「放她到桌面」，就在桌面上放个快捷方式：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\desktop\install-shortcut.ps1
+```
+
+它会生成「莲鲸桌宠」，图标用插件自己的（`assets/lianjing.ico`，7 个尺寸）。双击之后跑的是 `desktop/open-pet.ps1`，每次现找 DSH 的端口：扫一遍本机在监听的 DeepSeek Harness，确认 `/dsh-lianjing/pet.json` 在线，再按那个端口把壳拉起来。所以 **DSH 重启、端口换了都不用重做快捷方式**；已经在跑的那只不会被开成第二只；DSH 没开或这个配置没装插件，它会弹窗说清楚原因。
 
 > 从 1.x 升上来：包名换成了 `dsh-plugin-lianjing`（原来叫 `dsh-plugin-fojing-pet`），先 `remove` 旧的再装新的；攒的「已积功德」会自动从旧的状态文件搬过来，不会清零。
 
@@ -451,15 +452,19 @@ dsh-plugin-lianjing/
 ├─ online.js           # 联网取经：从白名单站点抓原文切成草稿
 ├─ cordis.patch.yml    # 插件配置 + 读经参谋 preset
 ├─ icon.png            # 插件列表里用的图标（她的脸，256×256）
-├─ assets/             # 四张立绘（含敲木鱼）+ 图标 + muyu.wav（木鱼声）
+├─ assets/             # 四张立绘（含敲木鱼）+ 插件图标 + 快捷方式图标 + muyu.wav（木鱼声）
 ├─ corpus/
-│  ├─ index.json       # 经目清单 v2（四个文件名）
+│  ├─ index.json       # 经目清单 v2（六个文件名）
 │  ├─ xin-jing.json    # 心经 11 句
 │  ├─ jin-gang-jing.json  # 金刚经 32 分
 │  ├─ pu-men-pin.json  # 普门品 12 段
-│  └─ ji-xiang-jing.json  # 吉祥经 12 段
+│  ├─ ji-xiang-jing.json  # 吉祥经 12 段
+│  ├─ amituo-jing.json    # 阿弥陀经 20 段（原文草稿，释义待补）
+│  └─ si-shi-er-zhang-jing.json  # 四十二章经 42 章（原文草稿，释义待补）
 ├─ skill/lianjing-vademecum/SKILL.md
 ├─ desktop/pet-shell.ps1   # Windows 独立悬浮壳（含功课页 + 敲木鱼）
+├─ desktop/open-pet.ps1    # 桌面快捷方式的入口：现找 DSH 端口再拉壳
+├─ desktop/install-shortcut.ps1  # 在桌面生成「莲鲸桌宠」快捷方式
 ├─ scripts/make-muyu.mjs   # 合成 assets/muyu.wav（确定性，可重跑）
 ├─ verify/smoke.mjs
 ├─ _raw/               # 抓下来的经文原文（语料重建用，不打进安装包）
